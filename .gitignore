@@ -1,2 +1,4 @@
 hand_dataset
 .idea/
+NeuralNet/cifar-10-batches-py
+NeuralNet/MNIST
