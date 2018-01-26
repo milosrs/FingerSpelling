@@ -1,10 +1,12 @@
 import sys
-import cv2
 import threading
 import queue
+import numpy as np
+
+from Tracker.HandTracker import HandTracker, cv2
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QDesktopWidget, QVBoxLayout, QSplitter, QLabel,
-                             QTextEdit, QMainWindow, QPushButton)
+                             QTextEdit, QMainWindow, QPushButton, QMessageBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from PyQt5 import QtGui
@@ -13,20 +15,21 @@ from PyQt5 import QtCore
 running = False
 capture_thread = None
 q = queue.Queue()
-
+isFirstFrame = True
 
 def grab(cam, queue, width, height, fps):
     global running
-    capture = cv2.VideoCapture(cam)
+    capture = cv2.VideoCapture(0)
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     capture.set(cv2.CAP_PROP_FPS, fps)
 
     while(running):
         frame = {}
-        capture.grab()
-        retval, img = capture.retrieve(0)
-        frame["img"] = img
+        success, img = capture.read()
+
+        if success:
+            frame["img"] = img
 
         if queue.qsize() < 10:
             queue.put(frame)
@@ -52,11 +55,15 @@ class OwnImageWidget(QWidget):
             qp.drawImage(QtCore.QPoint(0, 0), self.image)
         qp.end()
 
+    def getImage(self):
+        return self.image
+
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.tracker = HandTracker(4)
         self.title = 'Finger Spelling'
         self.resize(900, 500)
         self.center()
@@ -75,19 +82,31 @@ class MainWindow(QMainWindow):
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(1)
 
+        self.isFirstFrame = True
         self.show()
 
+    def getLiveFeed(self):
+        liveFeed = None
+        if self.frame_widget.live_feed is not None:
+            liveFeed = self.frame_widget.live_feed
+
+        return liveFeed
 
     def start_clicked(self):
         global running
         running = True
+        capture_thread = threading.Thread(target=grab, args=(0, q, 1280, 720, 30))
         capture_thread.start()
 
     def closeEvent(self, event):
         global running
         running = False
 
+    def set_isFirstFrame(self, isFirst):
+        self.isFirstFrame = isFirst
+
     def update_frame(self):
+        global running
         if not q.empty():
             frame = q.get()
             img = frame["img"]
@@ -100,12 +119,24 @@ class MainWindow(QMainWindow):
             if scale == 0:
                 scale = 1
 
-            img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            height, width, bpc = img.shape
-            bpl = bpc * width
-            image = QtGui.QImage(img.data, width, height, bpl, QtGui.QImage.Format_RGB888)
-            self.frame_widget.live_feed.setImage(image)
+            toPut = None
+
+            if running:
+                if self.isFirstFrame:
+                    if self.frame_widget.live_feed is not None:
+                        toPut = self.tracker.initTracker(self.frame_widget.live_feed, frame)
+                else:
+                    print('Not first frame')
+                    if self.frame_widget.live_feed is not None:
+                        toPut = self.tracker.trackframe(self.frame_widget.live_feed, frame)
+
+            if toPut is not None:
+                image1 = QtGui.QImage(toPut, toPut.shape[0], toPut.shape[1], toPut.shape[2] * toPut.shape[0], QtGui.QImage.Format_RGB888)
+                self.frame_widget.live_feed.setImage(image1)
+
+            self.set_isFirstFrame(False)
+
+
 
     def center(self):
         qr = self.frameGeometry()
@@ -153,4 +184,3 @@ class FrameWidget(QWidget):
         self.layout.addWidget(self.splitter)
 
         self.setLayout(self.layout)
-
