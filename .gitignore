@@ -1,3 +1,4 @@
 hand_dataset
 .idea/
-.idea/FingerSpelling.iml
+NeuralNet/cifar-10-batches-py
+NeuralNet/MNIST

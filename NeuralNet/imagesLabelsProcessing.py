@@ -1,13 +1,6 @@
 from os import listdir
 from os.path import isfile, join
 import cv2
-from tensorflow.contrib.factorization.examples.mnist import NUM_CLASSES
-import keras
-from keras import backend
-from keras.preprocessing.image import ImageDataGenerator, load_img, img_to_array
-from keras.models import Sequential, load_model, model_from_json
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Conv2D, MaxPooling2D
 import matplotlib.pyplot as plot
 
 
@@ -23,7 +16,7 @@ def plot_image(image, figsize=(8,8), recolour=False):
     elif image.shape[-1] == 1 or len(image.shape)==2:
         plot.imshow(image, cmap='gray')
     else:
-        raise Exception('Image has invalid shape')
+        raise Exception('Image has an invalid shape')
 
 class Relation:
     def __init__(self, image, annotation):
@@ -76,6 +69,9 @@ class ImagesProcessing:
             if self.checkFormat(imageToBeUsed, valid_image_formats) and self.checkFormat(annotationToBeUsed, valid_annot_formats):
 
                 testRelation = Relation(imageToBeUsed, annotationToBeUsed)
+                testRelation.printProperties()
                 relationCollection.insert(relationCollection.__len__(), testRelation)
 
         return relationCollection
+
+
