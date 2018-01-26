@@ -31,6 +31,7 @@ class HandTracker():
         numpyImage = np.asarray(firstFrame["img"], dtype=np.uint8)
         self.bbox = cv2.selectROI(numpyImage)
         self.tracker.init(numpyImage, self.bbox)
+        cv2.destroyAllWindows()
         return numpyImage
 
     def trackframe(self, window, source):
@@ -44,6 +45,4 @@ class HandTracker():
         else:
             cv2.putText(numpyImage, "Tracking failure detected", (100, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
 
-        fps = cv2.getTickFrequency() / (cv2.getTickCount())
-        cv2.putText(numpyImage, "FPS : " + str(int(fps)), (100, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 0, 0), 2)
         return numpyImage

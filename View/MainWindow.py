@@ -131,8 +131,12 @@ class MainWindow(QMainWindow):
                         toPut = self.tracker.trackframe(self.frame_widget.live_feed, frame)
 
             if toPut is not None:
-                image1 = QtGui.QImage(toPut, toPut.shape[0], toPut.shape[1], toPut.shape[2] * toPut.shape[0], QtGui.QImage.Format_RGB888)
-                self.frame_widget.live_feed.setImage(image1)
+                resizedImg = cv2.resize(toPut, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+                img = cv2.cvtColor(resizedImg, cv2.COLOR_BGR2RGB)
+                height, width, channel = img.shape
+                bytesPerLine = 3*width
+                qtImage = QtGui.QImage(img, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
+                self.frame_widget.live_feed.setImage(qtImage)
 
             self.set_isFirstFrame(False)
 
