@@ -1,3 +1,8 @@
+#TREBA DA SE ODRADI TRANSFER ZNANJA PREKO INCEPTIONA!
+#TREBA DA ISTRENIRAMO NEURONSKU KORISTECI MNIST, CIFAR10, RUKE....
+#https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/08_Transfer_Learning.ipynb
+
+
 import matplotlib.pyplot as plot
 import tensorflow
 import numpy as np
