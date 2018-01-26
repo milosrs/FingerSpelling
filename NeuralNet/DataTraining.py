@@ -6,6 +6,7 @@ import keras.layers.advanced_activations as activations
 import h5py
 
 from os import listdir
+from enum import Enum
 from os.path import isfile, join
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import InputLayer, Input
@@ -15,6 +16,13 @@ from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.models import load_model
+
+class TrainingBatch(Enum):
+    CIFAR='CIFAR'
+    MNIST='MNIST'
+    HANDS='HANDS'
+
+activeTrainingBatch = TrainingBatch.CIFAR
 
 #Size of MNIST image
 img_size_MNIST = 28
@@ -85,9 +93,9 @@ class CNNModel():
         del self.model
         self.model = None
 
-    def start_training(self):
+    def start_training(self, images, labels):
         self.model.compile(optimizer=self.optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-        history = self.model.fit(x=data.train.images, y=data.train.labels, epochs=1, batch_size=128)
+        history = self.model.fit(x=images, y=labels, epochs=3, batch_size=128)
         return history
 
     def plot_learning_process(self):
@@ -197,36 +205,59 @@ class Ploter():
 
         plot.show()
 
-data = input_data.read_data_sets('MNIST', one_hot=True)
-print("Size of:")
-print("- Training-set:\t\t{}".format(len(data.train.labels)))
-print("- Test-set:\t\t{}".format(len(data.test.labels)))
-print("- Validation-set:\t{}".format(len(data.validation.labels)))
-print('Tensorflow version: '+tensorflow.__version__)
-print('Keras: '+tensorflow.keras.__version__)
-
 ploter = Ploter()
 model = CNNModel()
 
-data.test.classNo = np.argmax(data.test.labels, axis=1)
+if activeTrainingBatch == TrainingBatch.MNIST:
+    data = input_data.read_data_sets('MNIST', one_hot=True)
+    print("Size of:")
+    print("- Training-set:\t\t{}".format(len(data.train.labels)))
+    print("- Test-set:\t\t{}".format(len(data.test.labels)))
+    print("- Validation-set:\t{}".format(len(data.validation.labels)))
+    print('Tensorflow version: '+tensorflow.__version__)
+    print('Keras: '+tensorflow.keras.__version__)
+    data.test.classNo = np.argmax(data.test.labels, axis=1)
 
-#Creating model for training. Loss function = https://en.wikipedia.org/wiki/Cross_entropy
-#Read documentation for fit.
+    #Creating model for training. Loss function = https://en.wikipedia.org/wiki/Cross_entropy
+    #Read documentation for fit.
 
-if isfile(modelPath):
-    model.set_model(load_model(modelPath))
-else:
-    history = model.start_training()
-    model.save_model('netModel.keras')
-    ploter.plot_learning_process(history)
-    result = model.get_model().evaluate(x=data.test.images, y=data.test.labels)
-    for name, value in zip(model.get_model().metrics_names, result):
-        print(name, value)
-        print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
+    if isfile(modelPath):
+        model.set_model(load_model(modelPath))
+    else:
+        history = model.start_training(data.test.images, data.test.labels)
+        model.save_model('netModel.keras')
+        ploter.plot_learning_process(history)
+        result = model.get_model().evaluate(x=data.test.images, y=data.test.labels)
+        for name, value in zip(model.get_model().metrics_names, result):
+            print(name, value)
+            print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
 
-testimages = data.test.images[0:9]
-cls_true = data.test.classNo[0:9]
-predictions = model.get_model().predict(x=testimages)
-cls_pred = np.argmax(predictions, axis=1)
-cls_true = data.test.classNo[0:9]
-ploter.plot_images(testimages, cls_pred=cls_pred, cls_true=cls_true)
+    testimages = data.test.images[0:9]
+    cls_true = data.test.classNo[0:9]
+    predictions = model.get_model().predict(x=testimages)
+    cls_pred = np.argmax(predictions, axis=1)
+    cls_true = data.test.classNo[0:9]
+    ploter.plot_images(testimages, cls_pred=cls_pred, cls_true=cls_true)
+
+elif activeTrainingBatch == TrainingBatch.CIFAR:
+    dictionary = unpickle('cifar-10-batches-py/data_batch_1')
+    print(dictionary.keys())
+    cifimages = dictionary[b'data']
+    ciflabels = dictionary[b'labels']
+    ciflabelnames = dictionary[b'batch_label']
+
+    testDict = unpickle('cifar-10-batches-py/test_batch')
+    testimg = testDict[b'data']
+    testlabel = testDict[b'labels']
+    testlabelnames = testDict[b'batch_label']
+
+    if isfile(modelPath):
+        model.set_model(load_model(modelPath))
+    else:
+        history = model.start_training(cifimages, ciflabels)
+        model.save_model('netModel.keras')
+        ploter.plot_learning_process(history)
+        result = model.get_model().evaluate(x=testimg, y=testlabel)
+        for name, value in zip(model.get_model().metrics_names, result):
+            print(name, value)
+            print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
