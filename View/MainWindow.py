@@ -15,10 +15,14 @@ from PyQt5 import QtCore
 running = False
 capture_thread = None
 q = queue.Queue()
+q_erosion = queue.Queue()
+q_dilation = queue.Queue()
 isFirstFrame = True
 
-def grab(cam, queue, width, height, fps):
+
+def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
     global running
+    kernel = np.ones((10, 10), np.uint8)
     capture = cv2.VideoCapture(0)
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
@@ -26,15 +30,30 @@ def grab(cam, queue, width, height, fps):
 
     while(running):
         frame = {}
+        frame_erosion = {}
+        frame_dilation = {}
         success, img = capture.read()
-
+        img_erosion = cv2.erode(img,kernel,iterations = 1)
+        imd_dilation = cv2.dilate(img,kernel,iterations = 1)
         if success:
             frame["img"] = img
+            frame_erosion["img"] = img_erosion
+            frame_dilation["img"] = imd_dilation
 
         if queue.qsize() < 10:
             queue.put(frame)
         else:
             queue.qsize()
+
+        if q_erosion.qsize() < 10:
+            q_erosion.put(frame_erosion)
+        else:
+            q_erosion.qsize()
+
+        if q_dilation.qsize() < 10:
+            q_dilation.put(frame_dilation)
+        else:
+            q_dilation.qsize()
 
 
 class OwnImageWidget(QWidget):
@@ -76,7 +95,14 @@ class MainWindow(QMainWindow):
 
         self.window_width = self.frame_widget.live_feed.width()
         self.window_height = self.frame_widget.live_feed.height()
+        self.win_erosion_h = self.frame_widget.live_feed_erosion.height()
+        self.win_erosion_w = self.frame_widget.live_feed_erosion.width()
+        self.win_dilation_h = self.frame_widget.live_feed_dilation.height()
+        self.win_dilation_w = self.frame_widget.live_feed_dilation.width()
+
         self.frame_widget.live_feed = OwnImageWidget(self.frame_widget.live_feed)
+        self.frame_widget.live_feed_erosion = OwnImageWidget(self.frame_widget.live_feed_erosion)
+        self.frame_widget.live_feed_dilation = OwnImageWidget(self.frame_widget.live_feed_dilation)
 
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.update_frame)
@@ -95,7 +121,7 @@ class MainWindow(QMainWindow):
     def start_clicked(self):
         global running
         running = True
-        capture_thread = threading.Thread(target=grab, args=(0, q, 1280, 720, 30))
+        capture_thread = threading.Thread(target=grab, args=(0, q, q_erosion, q_dilation, 1280, 720, 30))
         capture_thread.start()
 
     def closeEvent(self, event):
@@ -110,7 +136,6 @@ class MainWindow(QMainWindow):
         if not q.empty():
             frame = q.get()
             img = frame["img"]
-
             img_height, img_width, img_colors = img.shape
             scale_w = float(self.window_width) / float(img_width)
             scale_h = float(self.window_height) / float(img_height)
@@ -140,6 +165,45 @@ class MainWindow(QMainWindow):
 
             self.set_isFirstFrame(False)
 
+        if not q_erosion.empty():
+            frame_erosion = q_erosion.get()
+            img_erosion = frame_erosion["img"]
+
+            img_height_e, img_width_e, img_colors_e = img_erosion.shape
+
+            scale_w_e = float(self.win_erosion_w) / float(img_width_e)
+            scale_h_e = float(self.win_erosion_h) / float(img_height_e)
+            scale_e = min([scale_w_e, scale_h_e])
+
+            if scale_e == 0:
+                scale_e = 1
+
+            resizedImg_e = cv2.resize(img_erosion, None, fx=scale_e, fy=scale_e, interpolation=cv2.INTER_CUBIC)
+            img_e = cv2.cvtColor(resizedImg_e, cv2.COLOR_BGR2RGB)
+            height_e, width_e, channel_e = img_e.shape
+            bytesPerLine_e = 3 * width_e
+            qtImage_e = QtGui.QImage(img_e.data, width_e, height_e, bytesPerLine_e, QtGui.QImage.Format_RGB888)
+            self.frame_widget.live_feed_erosion.setImage(qtImage_e)
+
+        if not q_dilation.empty():
+            frame_dilation = q_dilation.get()
+            img_dilation = frame_dilation["img"]
+
+            img_height_d, img_width_d, img_colors_d = img_dilation.shape
+
+            scale_w_d = float(self.win_dilation_w) / float(img_width_d)
+            scale_h_d = float(self.win_dilation_h) / float(img_height_d)
+            scale_d = min([scale_w_d, scale_h_d])
+
+            if scale_d == 0:
+                scale_d = 1
+
+            resizedImg_d = cv2.resize(img_dilation, None, fx=scale_d, fy=scale_d, interpolation=cv2.INTER_CUBIC)
+            img_d = cv2.cvtColor(resizedImg_d, cv2.COLOR_BGR2RGB)
+            height_d, width_d, channel_d = img_d.shape
+            bytesPerLine_d = 3 * width_d
+            qtImage_d = QtGui.QImage(img_d.data, width_d, height_d, bytesPerLine_d, QtGui.QImage.Format_RGB888)
+            self.frame_widget.live_feed_dilation.setImage(qtImage_d)
 
 
     def center(self):
@@ -157,8 +221,10 @@ class FrameWidget(QWidget):
 
         self.live_feed = QWidget()
         self.live_feed_erosion = QWidget()
-        self.live_feed_erosion.setMaximumSize(200,200);
+        self.live_feed_erosion.setMinimumSize(200, 200)
+        self.live_feed_erosion.setMaximumSize(200,200)
         self.live_feed_dilation = QWidget()
+        self.live_feed_dilation.setMinimumSize(200, 200)
         self.live_feed_dilation.setMaximumSize(200,200)
 
         self.side_window = QSplitter(Qt.Vertical)
@@ -170,6 +236,7 @@ class FrameWidget(QWidget):
         self.upper_frame.addWidget(self.side_window)
 
         self.start_button = QPushButton('Start feed', self)
+        self.train_nnetwork = QPushButton('Train neural network', self)
 
         self.label = QLabel("Output: ")
         self.text_edit = QTextEdit()
@@ -180,11 +247,16 @@ class FrameWidget(QWidget):
         self.b_splitter.addWidget(self.label)
         self.b_splitter.addWidget(self.start_button)
 
+        self.bb_splitter = QSplitter(Qt.Vertical)
+        self.bb_splitter.addWidget(self.b_splitter)
+        self.bb_splitter.addWidget(self.train_nnetwork)
+
         self.splitter = QSplitter(Qt.Horizontal)
-        self.splitter.addWidget(self.b_splitter)
+        self.splitter.addWidget(self.bb_splitter)
         self.splitter.addWidget(self.text_edit)
 
         self.layout.addWidget(self.upper_frame)
         self.layout.addWidget(self.splitter)
 
         self.setLayout(self.layout)
+

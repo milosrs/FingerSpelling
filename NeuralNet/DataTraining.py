@@ -9,6 +9,17 @@ import numpy as np
 import math
 import keras.layers.advanced_activations as activations
 import h5py
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import numpy as np
+import time
+from datetime import timedelta
+import os
+import cifar10
+import inception
+import prettytensor as pt
+
+
 
 from os import listdir
 from enum import Enum
@@ -21,13 +32,16 @@ from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.models import load_model
+from cifar10 import num_classes
 
 class TrainingBatch(Enum):
     CIFAR='CIFAR'
     MNIST='MNIST'
     HANDS='HANDS'
+    CIFRA10='CIFRA10'
 
-activeTrainingBatch = TrainingBatch.CIFAR
+
+activeTrainingBatch = TrainingBatch.CIFRA10
 
 #Size of MNIST image
 img_size_MNIST = 28
@@ -266,3 +280,9 @@ elif activeTrainingBatch == TrainingBatch.CIFAR:
         for name, value in zip(model.get_model().metrics_names, result):
             print(name, value)
             print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
+
+elif activeTrainingBatch == TrainingBatch.CIFRA10:
+    # storing the data-set
+    cifar10.data_path = "C:/Users/Milan/Documents/Data/"
+    cifar10.maybe_download_and_extract()
+    class_names = cifar10.load_class_names()

@@ -4,8 +4,8 @@ from NeuralNet.imagesLabelsProcessing import ImagesProcessing
 def main():
     app = QApplication(sys.argv)
     mainWindow = MainWindow()
-    imageProcessor = ImagesProcessing()
-    imageProcessor.createRelations()
+    #imageProcessor = ImagesProcessing()
+    #imageProcessor.createRelations()
     sys.exit(app.exec_())
 
 
