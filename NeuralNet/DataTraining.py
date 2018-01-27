@@ -2,7 +2,6 @@
 #TREBA DA ISTRENIRAMO NEURONSKU KORISTECI MNIST, CIFAR10, RUKE....
 #https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/08_Transfer_Learning.ipynb
 
-
 import matplotlib.pyplot as plot
 import tensorflow
 import numpy as np
@@ -15,8 +14,6 @@ import numpy as np
 import time
 from datetime import timedelta
 import os
-
-
 
 from os import listdir
 from enum import Enum
@@ -34,7 +31,7 @@ class TrainingBatch(Enum):
     CIFAR='CIFAR'
     MNIST='MNIST'
     HANDS='HANDS'
-    CIFRA10='CIFRA10'
+    CIFAR10='CIFRA10'
 
 
 activeTrainingBatch = TrainingBatch.CIFRA10
@@ -277,8 +274,7 @@ elif activeTrainingBatch == TrainingBatch.CIFAR:
             print(name, value)
             print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
 
-elif activeTrainingBatch == TrainingBatch.CIFRA10:
+elif activeTrainingBatch == TrainingBatch.CIFAR10:
     # storing the data-set
-    cifar10.data_path = "C:/Users/Milan/Documents/Data/"
-    cifar10.maybe_download_and_extract()
-    class_names = cifar10.load_class_names()
+    cifar10path = "cifar-10-batches-py"
+

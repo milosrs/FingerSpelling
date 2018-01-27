@@ -35,9 +35,6 @@ class Relation:
     def printProperties(self):
         print("Properties: "+self.image+", "+self.ROI)
 
-
-
-
 class ImagesProcessing:
     def __init__(self):
         self.NUM_CLASSES = 1
