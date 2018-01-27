@@ -18,7 +18,7 @@ q = queue.Queue()
 q_erosion = queue.Queue()
 q_dilation = queue.Queue()
 isFirstFrame = True
-
+counter = 0
 
 def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
     global running
@@ -261,6 +261,8 @@ class MainWindow(QMainWindow):
             bytesPerLine_d = 3 * width_d
             qtImage_d = QtGui.QImage(img_d.data, width_d, height_d, bytesPerLine_d, QtGui.QImage.Format_RGB888)
             self.frame_widget.live_feed_dilation.setImage(qtImage_d)
+
+
 
 
     def center(self):
