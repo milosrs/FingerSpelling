@@ -15,9 +15,6 @@ import numpy as np
 import time
 from datetime import timedelta
 import os
-import cifar10
-import inception
-import prettytensor as pt
 
 
 
@@ -32,7 +29,6 @@ from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.models import load_model
-from cifar10 import num_classes
 
 class TrainingBatch(Enum):
     CIFAR='CIFAR'
