@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+
 class HandTracker():
 
     def __init__(self, trackType):
@@ -10,6 +11,9 @@ class HandTracker():
         self.major = major
         self.minor = minor
         self.subminor = subminor
+        self.top_left= None
+        self.bottom_right = None
+        self.tracking_state = None
 
     def printVersions(self):
         print('OpenCV Version: {}.{}.{}'.format(self.major, self.minor, self.subminor))
@@ -37,12 +41,24 @@ class HandTracker():
     def trackframe(self, window, source):
         numpyImage = np.asarray(source["img"], dtype=np.uint8)
         success, bbox = self.tracker.update(numpyImage)
+        self.tracking_state = success
 
         if success:
             p1 = (int(bbox[0]), int(bbox[1]))
             p2 = (int(bbox[0]+bbox[2]), int(bbox[1]+bbox[3]))
+            self.top_left = p1
+            self.bottom_right = p2
             cv2.rectangle(numpyImage, p1, p2, (0,255,0), 2, 1)
         else:
             cv2.putText(numpyImage, "Tracking failure detected", (100, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
 
         return numpyImage
+
+    def get_tracking_state(self):
+        return self.tracking_state
+
+    def get_corner(self):
+        return self.top_left
+
+    def get_opposite_corner(self):
+        return self.bottom_right

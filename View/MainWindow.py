@@ -33,8 +33,10 @@ def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
         frame_erosion = {}
         frame_dilation = {}
         success, img = capture.read()
-        img_erosion = cv2.erode(img,kernel,iterations = 1)
-        imd_dilation = cv2.dilate(img,kernel,iterations = 1)
+
+        img_erosion = cv2.erode(img, kernel, iterations = 1)
+        imd_dilation = cv2.dilate(img, kernel, iterations = 1)
+
         if success:
             frame["img"] = img
             frame_erosion["img"] = img_erosion
@@ -87,6 +89,8 @@ class MainWindow(QMainWindow):
         self.resize(900, 500)
         self.center()
         self.setWindowTitle(self.title)
+        self.count = 0
+        self.use_feed = False
 
         self.frame_widget = FrameWidget(self)
         self.setCentralWidget(self.frame_widget)
@@ -169,6 +173,35 @@ class MainWindow(QMainWindow):
             frame_erosion = q_erosion.get()
             img_erosion = frame_erosion["img"]
 
+            self.count += 1
+            if self.count > 5:
+                self.use_feed = True
+                self.count = 0
+
+            if running:
+                if self.isFirstFrame is False:
+                    if self.frame_widget.live_feed_erosion is not None:
+                        if self.use_feed is True:
+                            state = self.tracker.get_tracking_state()
+                            if state is True:
+                                p1 = self.tracker.get_corner()
+                                p2 = self.tracker.get_opposite_corner()
+                                p1_y = p1[1]
+                                p1_y_h = p2[1] - p1[1]
+                                p1_x = p1[0]
+                                p1_x_w = p2[0] - p1[0]
+                                img_erosion = img_erosion[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
+                            else:
+                                pass
+                        else:
+                            pass
+                    else:
+                        pass
+                else:
+                    pass
+            else:
+                pass
+
             img_height_e, img_width_e, img_colors_e = img_erosion.shape
 
             scale_w_e = float(self.win_erosion_w) / float(img_width_e)
@@ -188,6 +221,30 @@ class MainWindow(QMainWindow):
         if not q_dilation.empty():
             frame_dilation = q_dilation.get()
             img_dilation = frame_dilation["img"]
+
+            if running:
+                if self.isFirstFrame is False:
+                    if self.frame_widget.live_feed_dilation is not None:
+                        if self.use_feed is True:
+                            state = self.tracker.get_tracking_state()
+                            if state is True:
+                                p1 = self.tracker.get_corner()
+                                p2 = self.tracker.get_opposite_corner()
+                                p1_y = p1[1]
+                                p1_y_h = p2[1] - p1[1]
+                                p1_x = p1[0]
+                                p1_x_w = p2[0] - p1[0]
+                                img_dilation = img_dilation[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
+                            else:
+                                pass
+                        else:
+                            pass
+                    else:
+                        pass
+                else:
+                    pass
+            else:
+                pass
 
             img_height_d, img_width_d, img_colors_d = img_dilation.shape
 
