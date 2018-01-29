@@ -1,9 +1,13 @@
-from os import listdir
-from os.path import isfile, join
 import scipy.io
 import cv2
 import numpy as np
 import matplotlib.pyplot as plot
+import matplotlib.patches as patches
+from PIL import Image
+
+from os import listdir
+from os.path import isfile, join
+from lxml import etree
 
 #Acces to ROI like this
 # roiShape = self.ROI.shape()
@@ -11,29 +15,52 @@ import matplotlib.pyplot as plot
 #   for j in range(roiShape[1])
 #       ...Code here
 
-def bgrtorgb(image):
-    return cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
-
-def plot_image(image, figsize=(8,8), recolour=False):
-    if recolour:
-        image = bgrtorgb(image)
-    plot.figure(figsize=figsize)
-    if image.shape[-1] == 3:
-        plot.imshow(image)
-    elif image.shape[-1] == 1 or len(image.shape)==2:
-        plot.imshow(image, cmap='gray')
-    else:
-        raise Exception('Image has an invalid shape')
+trainingImagesPath = '../hand_dataset/training_dataset/training_data/images/'
+trainingAnnotationsPath = '../hand_dataset/training_dataset/training_data/annotations/'
+valid_image_formats = ["jpg", "gif", "png", "bmp"]
+valid_annot_formats = ["mat"]
 
 class Relation:
     def __init__(self, image, annotation, ROI):
-        self.image = image
+        self.imageFilename = image
+        self.imagePath = join(trainingImagesPath, image)
         self.annotation = annotation
         self.ROIdata = ROI
         self.ROI = []
+        self.image = np.array(Image.open(self.imagePath), dtype=np.uint8)
 
     def printProperties(self):
-        print("Properties: "+self.image+", "+self.ROI)
+        print("Properties: {0} \n Coords: {1}".format(self.imagePath, self.ROIdata))
+
+    def plotWithBBox(self):
+        fig, axes = plot.subplots(1)
+        axes.imshow(self.image)
+        for coordList in self.ROIdata:
+            x_max = max(coordList[0][1],coordList[1][1],coordList[2][1],coordList[3][1])
+            x_min = min(coordList[0][1],coordList[1][1],coordList[2][1],coordList[3][1])
+            y_max = max(coordList[1][0], coordList[2][0],coordList[0][0], coordList[3][0])
+            y_min =  min(coordList[1][0], coordList[2][0],coordList[0][0], coordList[3][0])
+            print("X_MIN: {0}, X_MAX: {1}, Y_MIN: {2}, Y_MAX: {3}".format(x_min, x_max, y_min, y_max))
+            rect = patches.Rectangle((x_min, y_max),x_max-x_min, y_min-y_max,linewidth=1, edgecolor='r', facecolor='none')
+            axes.add_patch(rect)
+        plot.show()
+
+    def generateXML(self):
+        root = etree.Element('annotation')
+        folder = etree.Element('folder')
+        folder.text = trainingImagesPath
+        filename = etree.Element('filename')
+        filename.text = self.imagePath
+        size = self.image.shape()
+        print(size)
+        #for coordList in self.ROIdata:
+           # x_max = max(coordList[0][1], coordList[1][1], coordList[2][1], coordList[3][1])
+           # x_min = min(coordList[0][1], coordList[1][1], coordList[2][1], coordList[3][1])
+          #  y_max = max(coordList[1][0], coordList[2][0], coordList[0][0], coordList[3][0])
+           # y_min = min(coordList[1][0], coordList[2][0], coordList[0][0], coordList[3][0])
+          #  width = x_max-x_min
+           # height = (y_max - y_min)
+
 
 class ImagesProcessing:
     def __init__(self):
@@ -76,21 +103,19 @@ class ImagesProcessing:
         return ROI
 
     def createRelations(self):
-        valid_image_formats = ["jpg","gif","png","bmp"]
-        valid_annot_formats = ["mat"]
-        trainingImagesPath = '../hand_dataset/training_dataset/training_data/images/'
-        trainingAnnotationsPath = '../hand_dataset/training_dataset/training_data/annotations/'
-
         images = [img for img in listdir(trainingImagesPath) if isfile(join(trainingImagesPath, img))]
         annotations = [mat for mat in listdir(trainingAnnotationsPath) if isfile(join(trainingAnnotationsPath, mat))]
 
         while not images.__len__() == 0 and not annotations.__len__() == 0:
-            imageToBeUsed = join(trainingImagesPath, images.pop())
+            imageToBeUsed = images.pop()
             annotationToBeUsed = join(trainingAnnotationsPath, annotations.pop())
 
             if self.checkFormat(imageToBeUsed, valid_image_formats) and self.checkFormat(annotationToBeUsed, valid_annot_formats):
                 ROI = self.createRoiFromAnnotation(annotationToBeUsed)
                 testRelation = Relation(imageToBeUsed, annotationToBeUsed, ROI)
+                testRelation.printProperties()
+                #testRelation.plotWithBBox()
+                testRelation.generateXML()
                 self.relationCollection.insert(self.relationCollection.__len__(), testRelation)
 
     def getRelationCollection(self):
