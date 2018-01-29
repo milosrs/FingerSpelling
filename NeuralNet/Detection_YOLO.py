@@ -4,8 +4,8 @@ import numpy as np
 import time
 
 options = {
-    'model': 'E:\\FingerSpelling\\NeuralNet\\darkflow\\cfg\\tiny-yolo-voc.cfg',
-    'load': 'E:\\FingerSpelling\\NeuralNet\\darkflow\\bin\\tiny-yolo-voc.weights',
+    'model': 'darkflow\\cfg\\tiny-yolo-voc.cfg',
+    'load': 'darkflow\\bin\\tiny-yolo-voc.weights',
 }
 
 tfnet = TFNet(options)
