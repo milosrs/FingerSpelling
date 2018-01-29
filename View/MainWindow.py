@@ -32,7 +32,13 @@ def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
         frame = {}
         frame_erosion = {}
         frame_dilation = {}
-        success, img = capture.read()
+        try:
+            success, img = capture.read()
+        except Exception as e:
+            print("Grab error")
+            print(type(e))
+            print(e.args)
+            print(e)
 
         img_erosion = cv2.erode(img, kernel, iterations = 1)
         imd_dilation = cv2.dilate(img, kernel, iterations = 1)
@@ -125,12 +131,19 @@ class MainWindow(QMainWindow):
     def start_clicked(self):
         global running
         running = True
-        capture_thread = threading.Thread(target=grab, args=(0, q, q_erosion, q_dilation, 1280, 720, 30))
-        capture_thread.start()
+        try:
+            capture_thread = threading.Thread(target=grab, args=(0, q, q_erosion, q_dilation, 1280, 720, 30))
+            capture_thread.start()
+        except Exception as e:
+            print("Thread error")
+            print(type(e))
+            print(e.args)
+            print(e)
 
     def closeEvent(self, event):
         global running
         running = False
+        #capture_thread.stop()
 
     def set_isFirstFrame(self, isFirst):
         self.isFirstFrame = isFirst
@@ -184,13 +197,20 @@ class MainWindow(QMainWindow):
                         if self.use_feed is True:
                             state = self.tracker.get_tracking_state()
                             if state is True:
-                                p1 = self.tracker.get_corner()
-                                p2 = self.tracker.get_opposite_corner()
-                                p1_y = p1[1]
-                                p1_y_h = p2[1] - p1[1]
-                                p1_x = p1[0]
-                                p1_x_w = p2[0] - p1[0]
-                                img_erosion = img_erosion[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
+                                try:
+                                    p1 = self.tracker.get_corner()
+                                    p2 = self.tracker.get_opposite_corner()
+                                    p1_y = p1[1]
+                                    p1_y_h = p2[1] - p1[1]
+                                    p1_x = p1[0]
+                                    p1_x_w = p2[0] - p1[0]
+                                    img_erosion = img_erosion[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
+                                except Exception as e:
+                                    print("Erosion error")
+                                    print(type(e))
+                                    print(e.args)
+                                    print(e)
+
                             else:
                                 pass
                         else:
@@ -228,13 +248,19 @@ class MainWindow(QMainWindow):
                         if self.use_feed is True:
                             state = self.tracker.get_tracking_state()
                             if state is True:
-                                p1 = self.tracker.get_corner()
-                                p2 = self.tracker.get_opposite_corner()
-                                p1_y = p1[1]
-                                p1_y_h = p2[1] - p1[1]
-                                p1_x = p1[0]
-                                p1_x_w = p2[0] - p1[0]
-                                img_dilation = img_dilation[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
+                                try:
+                                    p1 = self.tracker.get_corner()
+                                    p2 = self.tracker.get_opposite_corner()
+                                    p1_y = p1[1]
+                                    p1_y_h = p2[1] - p1[1]
+                                    p1_x = p1[0]
+                                    p1_x_w = p2[0] - p1[0]
+                                    img_dilation = img_dilation[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
+                                except Exception as e:
+                                    print("Dilation error")
+                                    print(type(e))
+                                    print(e.args)
+                                    print(e)
                             else:
                                 pass
                         else:
