@@ -321,5 +321,11 @@ elif activeTrainingBatch == TrainingBatch.HANDS:
         for pathDepth in pathsinPaths:
             pathInPath = pathToGo + "/" +  pathDepth
             print(pathInPath)
-
+            #Ucitas ceo folder slika
+            #Pozoves treniranje
+            #Sacuvas model
+            #Izbrises slike iz memorije
+            #Ucitas sacuvan model
+            #Plotujes tezine
+            #ako nisu jednobojne, treniraj dalje, ako jesu zovi  rikija na 0611586802
 
