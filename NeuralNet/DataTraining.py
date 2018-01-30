@@ -144,6 +144,9 @@ class VGGNet():
         history = self.model.fit(x=images, y=labels, epochs=1000)
         return history
 
+    def load_model(self, modelPath):
+        self.model = load_model(modelPath)
+
     def get_model(self):
         return self.model
 
