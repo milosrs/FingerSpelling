@@ -17,23 +17,18 @@ import numpy as np
 import time
 import os
 
+from os import listdir
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, Convolution2D, MaxPooling2D, ZeroPadding2D
+from keras.layers import Dense, Dropout, Flatten, Convolution2D, MaxPooling2D, ZeroPadding2D, InputLayer
 from keras.optimizers import SGD
+from keras.models import load_model
 from datetime import timedelta
 
 
 from os import listdir
 from enum import Enum
 from os.path import isfile, join
-from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.layers import InputLayer, Input
-from tensorflow.python.keras.layers import Reshape, MaxPooling2D
-from tensorflow.python.keras.layers import Conv2D, Dense, Flatten
 from tensorflow.examples.tutorials.mnist import input_data
-from tensorflow.python.keras.optimizers import Adam
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.models import load_model
 
 class TrainingBatch(Enum):
     CIFAR='CIFAR'
@@ -42,7 +37,7 @@ class TrainingBatch(Enum):
     CIFAR10='CIFRA10'
 
 
-activeTrainingBatch = TrainingBatch.CIFRA10
+activeTrainingBatch = TrainingBatch.HANDS
 
 #Size of MNIST image
 img_size_MNIST = 28
@@ -88,40 +83,40 @@ class VGGNet():
     #Creates a new deep VGGNModel. Invoked in constructor
     def create_model(self, weights_path):
         model = Sequential()
-        model.add(ZeroPadding2D((1, 1), input_shape=(3, 224, 224)))
-        model.add(Convolution2D(64, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3)))
+        model.add(Convolution2D(64, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(64, 3, 3, activation='relu'))
+        model.add(Convolution2D(64, (3, 3), activation='relu'))
         model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(128, 3, 3, activation='relu'))
+        model.add(Convolution2D(128, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(128, 3, 3, activation='relu'))
+        model.add(Convolution2D(128, (3, 3), activation='relu'))
         model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(Convolution2D(256, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(Convolution2D(256, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(Convolution2D(256, (3, 3), activation='relu'))
         model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, (3, 3), activation='relu'))
         model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, (3, 3), activation='relu'))
         model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
         model.add(Flatten())
@@ -129,13 +124,12 @@ class VGGNet():
         model.add(Dropout(0.5))
         model.add(Dense(4096, activation='relu'))
         model.add(Dropout(0.5))
-        model.add(Dense(1000, activation='softmax'))
+        model.add(Dense(1000, activation='softmax')) #Promeni 15-ku na neki drugi broj
 
-
-        if(weights_path):
-            model.load_weights(weights_path)
-            model.pop()
-            model.add(Dense(15, activetion='softmax'))
+        #if weights_path is not None:
+            #model.load_weights(weights_path, by_name=True)
+            #model.pop()
+            #model.add(Dense(15, activetion='softmax'))
 
         return model
 
@@ -147,7 +141,7 @@ class VGGNet():
 
     def start_training(self, images, labels):
         self.model.compile(optimizer=self.optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-        history = self.model.fit(x=images, y=labels, epochs=20)
+        history = self.model.fit(x=images, y=labels, epochs=1000)
         return history
 
     def get_model(self):
@@ -255,7 +249,7 @@ class Ploter():
         plot.show()
 
 ploter = Ploter()
-model = VGGNet()
+model = VGGNet("vgg16_weights.h5")
 
 if activeTrainingBatch == TrainingBatch.MNIST:
     data = input_data.read_data_sets('MNIST', one_hot=True)
@@ -314,4 +308,15 @@ elif activeTrainingBatch == TrainingBatch.CIFAR:
 elif activeTrainingBatch == TrainingBatch.CIFAR10:
     # storing the data-set
     cifar10path = "cifar-10-batches-py"
+
+elif activeTrainingBatch == TrainingBatch.HANDS:
+    originalPath = '../../dataset5/'
+    paths = listdir(originalPath)
+    for path in paths:
+        pathToGo = join(originalPath, path)
+        pathsinPaths = listdir(pathToGo)
+        for pathDepth in pathsinPaths:
+            pathInPath = pathToGo + "/" +  pathDepth
+            print(pathInPath)
+
 
