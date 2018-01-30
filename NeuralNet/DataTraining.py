@@ -2,18 +2,26 @@
 #TREBA DA ISTRENIRAMO NEURONSKU KORISTECI MNIST, CIFAR10, RUKE....
 #https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/08_Transfer_Learning.ipynb
 
+
+#Za klasifikaciju sekvence koristiti Stacked LSTM mreze! (Long Short Term Memmory Network)
+#Postoji ceo clanak o tome na Kerasu
+
 import matplotlib.pyplot as plot
 import tensorflow
 import numpy as np
 import math
-import keras.layers.advanced_activations as activations
 import h5py
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
 import time
-from datetime import timedelta
 import os
+
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Flatten, Convolution2D, MaxPooling2D, ZeroPadding2D
+from keras.optimizers import SGD
+from datetime import timedelta
+
 
 from os import listdir
 from enum import Enum
@@ -72,31 +80,63 @@ def unpickle(file):
         dict = pickle.load(fo, encoding='bytes')
     return dict
 
-class CNNModel():
-    def __init__(self):
-        self.model = self.create_model()
-        self.optimizer = Adam(lr=1e-3)
+class VGGNet():
+    def __init__(self, weights_path=None):
+        self.model = self.create_model(weights_path)
+        self.optimizer = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
 
-    #Creates a new model. Invoked in constructor
-    def create_model(self):
+    #Creates a new deep VGGNModel. Invoked in constructor
+    def create_model(self, weights_path):
         model = Sequential()
+        model.add(ZeroPadding2D((1, 1), input_shape=(3, 224, 224)))
+        model.add(Convolution2D(64, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(64, 3, 3, activation='relu'))
+        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
-        model.add(InputLayer(input_shape=(img_size_flat,)))
-        model.add(Reshape(img_shape_full))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(128, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(128, 3, 3, activation='relu'))
+        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
-        # First CONV with ReLu activation and MaxPooling
-        model.add(Conv2D(kernel_size=5, strides=1, filters=16, padding='same', activation='relu', name='conv1'))
-        model.add(MaxPooling2D(pool_size=3, strides=2))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
-        # Second CONV with LeakyReLu activation and MaxPooling
-        model.add(Conv2D(kernel_size=5, strides=1, filters=32, padding='same', activation='relu', name='conv2'))
-        model.add(MaxPooling2D(pool_size=3, strides=2))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
         model.add(Flatten())
-        model.add(Dense(128, activation='relu'))
+        model.add(Dense(4096, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(4096, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(1000, activation='softmax'))
 
-        # Softmax used for classification. Theory behind it: https://en.wikipedia.org/wiki/Softmax_function
-        model.add(Dense(num_classes, activation='softmax'))
+
+        if(weights_path):
+            model.load_weights(weights_path)
+            model.pop()
+            model.add(Dense(15, activetion='softmax'))
+
         return model
 
     #Saves and deletes an existing model.
@@ -107,11 +147,8 @@ class CNNModel():
 
     def start_training(self, images, labels):
         self.model.compile(optimizer=self.optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-        history = self.model.fit(x=images, y=labels, epochs=3, batch_size=128)
+        history = self.model.fit(x=images, y=labels, epochs=20)
         return history
-
-    def plot_learning_process(self):
-        self.model.built
 
     def get_model(self):
         return self.model
@@ -218,7 +255,7 @@ class Ploter():
         plot.show()
 
 ploter = Ploter()
-model = CNNModel()
+model = VGGNet()
 
 if activeTrainingBatch == TrainingBatch.MNIST:
     data = input_data.read_data_sets('MNIST', one_hot=True)
