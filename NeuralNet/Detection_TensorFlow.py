@@ -27,7 +27,7 @@ if tf.__version__ < '1.4.0':
 
 #Adding object_detection to system path
 print(sys.path)
-sys.path.insert(0, 'models-master\\research\\object_detection')
+sys.path.insert(0, 'E:\\projekti\\Eclipse work\\FingerSpelling\\NeuralNet\\models-master\\research\\object_detection')
 print(sys.path)
 
 from utils import label_map_util
