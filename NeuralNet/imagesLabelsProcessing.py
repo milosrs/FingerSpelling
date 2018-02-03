@@ -1,5 +1,4 @@
 import scipy.io
-import cv2
 import numpy as np
 import matplotlib.pyplot as plot
 import matplotlib.patches as patches
