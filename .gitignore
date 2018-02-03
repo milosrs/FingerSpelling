@@ -7,3 +7,6 @@ NeuralNet/darkflow
 NeuralNet/ssd_mobilenet_v1_coco_2017_11_17.tar.gz
 NeuralNet/ssd_mobilenet_v1_coco_2017_11_17
 NeuralNet/vgg16_weights.5
+NeuralNet/images
+NeuralNet/annotations
+NeuralNet/ds9
