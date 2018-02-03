@@ -16,7 +16,15 @@ import tensorflow as tf
 import numpy as np
 import time
 import os
+import io
+import cv2
 
+
+import pylab as pl
+import matplotlib.cm as cm
+import numpy.ma as ma
+from PIL import Image
+import glob
 from os import listdir
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, Convolution2D, MaxPooling2D, ZeroPadding2D, InputLayer
@@ -124,7 +132,7 @@ class VGGNet():
         model.add(Dropout(0.5))
         model.add(Dense(4096, activation='relu'))
         model.add(Dropout(0.5))
-        model.add(Dense(1000, activation='softmax')) #Promeni 15-ku na neki drugi broj
+        model.add(Dense(15, activation='softmax')) #Promeni 15-ku na neki drugi broj
 
         #if weights_path is not None:
             #model.load_weights(weights_path, by_name=True)
@@ -254,6 +262,63 @@ class Ploter():
 ploter = Ploter()
 model = VGGNet("vgg16_weights.h5")
 
+
+def make_mosaic(imgs, nrows, ncols, border=1):
+    """
+    Given a set of images with all the same shape, makes a
+    mosaic with nrows and ncols
+    """
+
+    nimgs = imgs.shape[0]
+    imshape = imgs.shape[1:]
+
+    mosaic = ma.masked_all((nrows * imshape[0] + (nrows - 1) * border,
+                            ncols * imshape[1] + (ncols - 1) * border),
+                           dtype=np.float32)
+
+    paddedh = imshape[0] + border
+    paddedw = imshape[1] + border
+    for i in tensorflow.xrange(nimgs):
+        row = int(np.floor(i / ncols))
+        col = i % ncols
+
+        mosaic[row * paddedh:row * paddedh + imshape[0],
+        col * paddedw:col * paddedw + imshape[1]] = imgs[i]
+    return mosaic
+
+
+# utility functions
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+def nice_imshow(ax, data, vmin=None, vmax=None, cmap=None):
+    """Wrapper around pl.imshow"""
+    if cmap is None:
+        cmap = cm.jet
+    if vmin is None:
+        vmin = data.min()
+    if vmax is None:
+        vmax = data.max()
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    im = ax.imshow(data, vmin=vmin, vmax=vmax, interpolation='nearest', cmap=cmap)
+    pl.colorbar(im, cax=cax)
+
+def plot_conv_weights(model, layer):
+    # Visualize weights
+    W = model.layers[layer].W.get_value(borrow=True)
+    W = np.squeeze(W)
+
+    if len(W.shape) == 4:
+        W = W.reshape((-1,W.shape[2],W.shape[3]))
+    print("W shape : ", W.shape)
+
+    pl.figure(figsize=(15, 15))
+    pl.title('conv weights')
+    s = int(np.sqrt(W.shape[0])+1)
+    nice_imshow(pl.gca(), make_mosaic(W, s, s), cmap=cm.binary)
+
+
+
 if activeTrainingBatch == TrainingBatch.MNIST:
     data = input_data.read_data_sets('MNIST', one_hot=True)
     print("Size of:")
@@ -313,19 +378,32 @@ elif activeTrainingBatch == TrainingBatch.CIFAR10:
     cifar10path = "cifar-10-batches-py"
 
 elif activeTrainingBatch == TrainingBatch.HANDS:
-    originalPath = '../../dataset5/'
+    #originalPath = '../../dataset5/'
+    originalPath = 'C:/Users/Milan/Desktop/dataset/dataset5/'
+    model_path = '../../NeuralNet/Model.keras'
     paths = listdir(originalPath)
+    list_of_labels = []
+    list_of_images = []
     for path in paths:
         pathToGo = join(originalPath, path)
         pathsinPaths = listdir(pathToGo)
         for pathDepth in pathsinPaths:
             pathInPath = pathToGo + "/" +  pathDepth
-            print(pathInPath)
-            #Ucitas ceo folder slika
-            #Pozoves treniranje
-            #Sacuvas model
-            #Izbrises slike iz memorije
-            #Ucitas sacuvan model
-            #Plotujes tezine
-            #ako nisu jednobojne, treniraj dalje, ako jesu zovi  rikija na 0611586802
+            list_of_labels.append(pathDepth)
+            for images in glob.glob(pathInPath+'/*.png'):
+                size = 244, 244
+                img = cv2.imread(images,0)
+                w, h = img.shape
+                img = cv2.resize(img, (224, 224))
+                ret, img_str = cv2.imencode('.png', img)
+                #list_of_images.append(img_str.tobytes())
+                list_of_images.append((w, h, 3))
+
+            history = model.start_training(list_of_images, list_of_labels)
+            model.save_model('Model.keras')
+            list_of_images = []
+            list_of_labels = []
+            new_model = model.load_model(model_path)
+            Ploter.plot_weights()
+
 
