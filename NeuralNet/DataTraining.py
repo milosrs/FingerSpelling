@@ -12,11 +12,7 @@ import numpy as np
 import math
 import h5py
 import matplotlib.pyplot as plt
-import tensorflow as tf
 import numpy as np
-import time
-import os
-import io
 import cv2
 
 
@@ -25,12 +21,10 @@ import matplotlib.cm as cm
 import numpy.ma as ma
 from PIL import Image
 import glob
-from os import listdir
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, Convolution2D, MaxPooling2D, ZeroPadding2D, InputLayer
+from keras.layers import Dense, Dropout, Flatten, Convolution2D, MaxPooling2D, ZeroPadding2D
 from keras.optimizers import SGD
 from keras.models import load_model
-from datetime import timedelta
 
 
 from os import listdir
@@ -84,14 +78,25 @@ def unpickle(file):
     return dict
 
 class VGGNet():
-    def __init__(self, weights_path=None):
-        self.model = self.create_model(weights_path)
+    def __init__(self, weights_path=None, batch_size=None):
+        self.model = self.create_model(weights_path, batch_size)
         self.optimizer = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+        self.batch_size = batch_size
 
     #Creates a new deep VGGNModel. Invoked in constructor
-    def create_model(self, weights_path):
+    def create_model(self, weights_path, batch_size):
         model = Sequential()
-        model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3)))
+        if batch_size is not None:
+            model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3)))
+        else:
+            model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3), batch_size=batch_size))
+
+        model.add(Convolution2D(32, (3, 3), activation='relu'))
+        model.add(ZeroPadding2D((1, 1)))
+        model.add(Convolution2D(32, (3, 3), activation='relu'))
+        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+
+        model.add(ZeroPadding2D((1, 1)))
         model.add(Convolution2D(64, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
         model.add(Convolution2D(64, (3, 3), activation='relu'))
@@ -101,43 +106,19 @@ class VGGNet():
         model.add(Convolution2D(128, (3, 3), activation='relu'))
         model.add(ZeroPadding2D((1, 1)))
         model.add(Convolution2D(128, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
-
         model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(256, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(256, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(256, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
-
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
-
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(512, (3, 3), activation='relu'))
+        model.add(Convolution2D(128, (3, 3), activation='relu'))
         model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
         model.add(Flatten())
-        model.add(Dense(4096, activation='relu'))
+        model.add(Dense(256, activation='relu'))
         model.add(Dropout(0.5))
-        model.add(Dense(4096, activation='relu'))
+        model.add(Dense(256, activation='relu'))
         model.add(Dropout(0.5))
         model.add(Dense(15, activation='softmax')) #Promeni 15-ku na neki drugi broj
 
-        #if weights_path is not None:
-            #model.load_weights(weights_path, by_name=True)
-            #model.pop()
-            #model.add(Dense(15, activetion='softmax'))
+        if weights_path is not None:
+            model.load_weights(weights_path, by_name=True)
 
         return model
 
@@ -149,7 +130,7 @@ class VGGNet():
 
     def start_training(self, images, labels):
         self.model.compile(optimizer=self.optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-        history = self.model.fit(x=images, y=labels, epochs=1000)
+        history = self.model.fit(x=images, y=labels, epochs=300)
         return history
 
     def load_model(self, modelPath):
@@ -260,7 +241,6 @@ class Ploter():
         plot.show()
 
 ploter = Ploter()
-model = VGGNet("vgg16_weights.h5")
 
 
 def make_mosaic(imgs, nrows, ncols, border=1):
@@ -320,6 +300,7 @@ def plot_conv_weights(model, layer):
 
 
 if activeTrainingBatch == TrainingBatch.MNIST:
+    model = VGGNet()
     data = input_data.read_data_sets('MNIST', one_hot=True)
     print("Size of:")
     print("- Training-set:\t\t{}".format(len(data.train.labels)))
@@ -351,6 +332,7 @@ if activeTrainingBatch == TrainingBatch.MNIST:
     ploter.plot_images(testimages, cls_pred=cls_pred, cls_true=cls_true)
 
 elif activeTrainingBatch == TrainingBatch.CIFAR:
+    model = VGGNet()
     dictionary = unpickle('cifar-10-batches-py/data_batch_1')
     print(dictionary.keys())
     cifimages = dictionary[b'data']
@@ -373,34 +355,33 @@ elif activeTrainingBatch == TrainingBatch.CIFAR:
             print(name, value)
             print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
 
-elif activeTrainingBatch == TrainingBatch.CIFAR10:
-    # storing the data-set
-    cifar10path = "cifar-10-batches-py"
-
 elif activeTrainingBatch == TrainingBatch.HANDS:
     originalPath = '../../dataset5/'
     model_path = '../../NeuralNet/Model.keras'
     paths = listdir(originalPath)
     label = ''
-    list_of_images = []
     for path in paths:
         pathToGo = join(originalPath, path)
         pathsinPaths = listdir(pathToGo)
         for letter in pathsinPaths:
             pathInPath = pathToGo + "/" +  letter
             label = letter
-            for images in glob.glob(pathInPath+'/*.png'):
-                size = 244, 244
-                img = cv2.imread(images,1)
-                img = cv2.resize(img, (224, 224))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                cv2.imshow('Resized', img)
-                list_of_images.append(img)
-
-            history = model.start_training(list_of_images, label)
-            model.save_model('Model.keras')
             list_of_images = []
-            list_of_labels = []
+            for imagePath in glob.glob(pathInPath+'/*.png'):
+                img = Image.open(imagePath)
+                img = img.resize((224, 224), Image.NEAREST)
+                npImg = np.asarray(img, dtype=np.uint8)
+                try:
+                    h,w,c = npImg.shape
+                    #img.show('WTF', command = None)
+                    list_of_images.append(npImg)
+                except:
+                    continue
+            model = VGGNet(weights_path=None, batch_size=list_of_images.__len__())
+            history = model.start_training(list_of_images, label)
+            model.save_model('signedModel.keras')
+            list_of_images = []
+            del list_of_images
             new_model = model.load_model(model_path)
             Ploter.plot_weights()
 
