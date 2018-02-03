@@ -378,28 +378,26 @@ elif activeTrainingBatch == TrainingBatch.CIFAR10:
     cifar10path = "cifar-10-batches-py"
 
 elif activeTrainingBatch == TrainingBatch.HANDS:
-    #originalPath = '../../dataset5/'
-    originalPath = 'C:/Users/Milan/Desktop/dataset/dataset5/'
+    originalPath = '../../dataset5/'
     model_path = '../../NeuralNet/Model.keras'
     paths = listdir(originalPath)
-    list_of_labels = []
+    label = ''
     list_of_images = []
     for path in paths:
         pathToGo = join(originalPath, path)
         pathsinPaths = listdir(pathToGo)
-        for pathDepth in pathsinPaths:
-            pathInPath = pathToGo + "/" +  pathDepth
-            list_of_labels.append(pathDepth)
+        for letter in pathsinPaths:
+            pathInPath = pathToGo + "/" +  letter
+            label = letter
             for images in glob.glob(pathInPath+'/*.png'):
                 size = 244, 244
-                img = cv2.imread(images,0)
-                w, h = img.shape
+                img = cv2.imread(images,1)
                 img = cv2.resize(img, (224, 224))
-                ret, img_str = cv2.imencode('.png', img)
-                #list_of_images.append(img_str.tobytes())
-                list_of_images.append((w, h, 3))
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                cv2.imshow('Resized', img)
+                list_of_images.append(img)
 
-            history = model.start_training(list_of_images, list_of_labels)
+            history = model.start_training(list_of_images, label)
             model.save_model('Model.keras')
             list_of_images = []
             list_of_labels = []

@@ -1,5 +1,11 @@
 import cv2
 import numpy as np
+from enum import Enum
+
+
+class Signal(Enum):
+    YOLO='YOLO',
+    TRACK='TRACK',
 
 
 class HandTracker():
@@ -14,11 +20,13 @@ class HandTracker():
         self.top_left= None
         self.bottom_right = None
         self.tracking_state = None
+        self.colors = [tuple(255 * np.random.rand(3)) for _ in range(10)]
+        self.signal = Signal.YOLO
 
     def printVersions(self):
         print('OpenCV Version: {}.{}.{}'.format(self.major, self.minor, self.subminor))
 
-    def initTracker(self, camWindow, firstFrame):
+    def initTracker(self, firstFrame, yoloNet):
         if self.selectedTracker == self.trackerTypes[0]:
             self.tracker = cv2.TrackerBoosting_create()
         elif self.selectedTracker == self.trackerTypes[1]:
@@ -32,13 +40,36 @@ class HandTracker():
         elif self.selectedTracker == self.trackerTypes[5]:
             self.tracker = cv2.TrackerGOTURN_create()
 
-        numpyImage = np.asarray(firstFrame["img"], dtype=np.uint8)
-        self.bbox = cv2.selectROI(numpyImage)
-        self.tracker.init(numpyImage, self.bbox)
-        cv2.destroyAllWindows()
+        frame = None
+        numpyImage = None
+        tl = None
+        br = None
+        results = yoloNet.return_predict(firstFrame)
+        for color, result in zip(self.colors, results):
+            tl = (result['topleft']['x'], result['topleft']['y'])
+            br = (result['bottomright']['x'], result['bottomright']['y'])
+            label = result['label']
+            confidence = result['confidence']
+            text = '{}: {:.0f}%'.format(label, confidence * 100)
+            frame = cv2.rectangle(frame, tl, br, color, 5)
+            frame = cv2.putText(
+                frame, text, tl, cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 0), 2)
+
+        if frame is not None:
+            numpyImage = np.asarray(frame, dtype=np.uint8)
+
+        if tl is not None and br is not None:
+            self.tracker.init(numpyImage, [tl[0], tl[1], br[0], br[1]])
+            self.signal = Signal.TRACK
+
         return numpyImage
 
-    def trackframe(self, window, source):
+    #def classifyHand(self, frame): TODO
+
+
+    def trackframe(self, source):
+        signal = Signal.TRACK
+
         numpyImage = np.asarray(source["img"], dtype=np.uint8)
         success, bbox = self.tracker.update(numpyImage)
         self.tracking_state = success
@@ -50,13 +81,13 @@ class HandTracker():
                 height, width, colors = img.shape
 
                 if bbox[0] < 0.0:
-                    bbox[0] = 5.0
+                    signal = Signal.YOLO
                 if bbox[1] < 0.0:
-                    bbox[1] = 5.0
+                    signal = Signal.YOLO
                 if bbox[0]+bbox[2] > width:
-                    bbox[2] = width - bbox[0]
+                    signal = Signal.YOLO
                 if bbox[1]+bbox[3] > height:
-                    bbox[3] = height - bbox[1]
+                    signal = Signal.YOLO
 
             except Exception as e:
                 print("Thread error")
@@ -71,9 +102,12 @@ class HandTracker():
             self.bottom_right = p2
             cv2.rectangle(numpyImage, p1, p2, (0,255,0), 2, 1)
         else:
-            cv2.putText(numpyImage, "Tracking failure detected", (100, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
+            signal = signal.YOLO
+            cv2.putText(numpyImage, "Detecting hands...", (100, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
 
-        return numpyImage
+        retVal = numpyImage
+
+        return retVal
 
     def get_tracking_state(self):
         return self.tracking_state
@@ -83,3 +117,6 @@ class HandTracker():
 
     def get_opposite_corner(self):
         return self.bottom_right
+
+    def get_tracker_status(self):
+        return self.trackerSignal

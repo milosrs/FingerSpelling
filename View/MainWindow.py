@@ -3,6 +3,8 @@ import threading
 import queue
 import numpy as np
 
+from Tracker.HandTracker import Signal
+from darkflow.net.build import TFNet
 from Tracker.HandTracker import HandTracker, cv2
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QDesktopWidget, QVBoxLayout, QSplitter, QLabel,
@@ -90,6 +92,7 @@ class OwnImageWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.yoloNet = None
         self.tracker = HandTracker(4)
         self.title = 'Finger Spelling'
         self.resize(900, 500)
@@ -120,6 +123,16 @@ class MainWindow(QMainWindow):
 
         self.isFirstFrame = True
         self.show()
+
+    def initYOLO(self):
+        options = {
+            'model': 'cfg\\tiny-yolo-voc-1c.cfg',
+            'load': 1125,
+            'threshold': 0.1
+        }
+
+        self.yoloNet = TFNet(options)
+
 
     def getLiveFeed(self):
         liveFeed = None
@@ -164,13 +177,12 @@ class MainWindow(QMainWindow):
             toPut = None
 
             if running:
-                if self.isFirstFrame:
+                if self.tracker.signal == Signal.YOLO:
                     if self.frame_widget.live_feed is not None:
-                        toPut = self.tracker.initTracker(self.frame_widget.live_feed, frame)
+                        toPut = self.tracker.initTracker(frame, self.yoloNet)
                 else:
-                    print('Not first frame')
                     if self.frame_widget.live_feed is not None:
-                        toPut = self.tracker.trackframe(self.frame_widget.live_feed, frame)
+                        toPut = self.tracker.trackframe(frame)
 
             if toPut is not None:
                 resizedImg = cv2.resize(toPut, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
