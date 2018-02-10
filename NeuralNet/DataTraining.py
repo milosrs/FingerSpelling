@@ -14,7 +14,7 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-
+import os
 
 import pylab as pl
 import matplotlib.cm as cm
@@ -25,8 +25,9 @@ from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, Convolution2D, MaxPooling2D, ZeroPadding2D
 from keras.optimizers import SGD
 from keras.models import load_model
+from keras.preprocessing.image import ImageDataGenerator
 
-
+from random import shuffle
 from os import listdir
 from enum import Enum
 from os.path import isfile, join
@@ -77,45 +78,33 @@ def unpickle(file):
         dict = pickle.load(fo, encoding='bytes')
     return dict
 
-class VGGNet():
+class Net():
     def __init__(self, weights_path=None, batch_size=None):
         self.model = self.create_model(weights_path, batch_size)
         self.optimizer = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
         self.batch_size = batch_size
 
-    #Creates a new deep VGGNModel. Invoked in constructor
+    #Creates a new deep model.
     def create_model(self, weights_path, batch_size):
         model = Sequential()
-        if batch_size is not None:
-            model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3)))
-        else:
-            model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3), batch_size=batch_size))
+
+        #Slike n*224x224x3 (3=kanali, n=broj slika)
+        model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3)))
 
         model.add(Convolution2D(32, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
         model.add(Convolution2D(32, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Dropout(0.25))
 
-        model.add(ZeroPadding2D((1, 1)))
         model.add(Convolution2D(64, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
         model.add(Convolution2D(64, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
-
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(128, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(128, (3, 3), activation='relu'))
-        model.add(ZeroPadding2D((1, 1)))
-        model.add(Convolution2D(128, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Dropout(0.25))
 
         model.add(Flatten())
         model.add(Dense(256, activation='relu'))
         model.add(Dropout(0.5))
-        model.add(Dense(256, activation='relu'))
-        model.add(Dropout(0.5))
-        model.add(Dense(15, activation='softmax')) #Promeni 15-ku na neki drugi broj
+        model.add(Dense(24, activation='softmax'))          #24 klase
 
         if weights_path is not None:
             model.load_weights(weights_path, by_name=True)
@@ -128,9 +117,9 @@ class VGGNet():
         del self.model
         self.model = None
 
-    def start_training(self, images, labels):
+    def start_training(self, images, labels, validation_data):
         self.model.compile(optimizer=self.optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-        history = self.model.fit(x=images, y=labels, epochs=300)
+        history = self.model.fit(x=images, y=labels, epochs=500, validation_data=validation_data)
         return history
 
     def load_model(self, modelPath):
@@ -240,67 +229,129 @@ class Ploter():
 
         plot.show()
 
+class ImageConverter():
+
+    def __init__(self):
+        self.labelmatrix = {'a': 0, 'b': 0, 'c': 0, 'd': 0, 'e': 0, 'f': 0, 'g': 0, 'h': 0, 'e': 0, 'i': 0, 'j': 0, 'k': 0, 'l': 0,
+            'm': 0, 'n': 0, 'o': 0, 'p': 0, 'q': 0, 'r': 0, 's': 0, 't': 0, 'u': 0, 'v': 0, 'w': 0, 'x': 0, 'y': 0, 'z': 0}
+        self.trainingdata = {'a': [], 'b': [], 'c': [], 'd': [], 'e': [], 'f': [], 'g': [], 'h': [], 'e': [], 'i': [], 'j': [], 'k': [], 'l': [],
+            'm': [], 'n': [], 'o': [], 'p': [], 'q': [], 'r': [], 's': [], 't': [], 'u': [], 'v': [], 'w': [], 'x': [], 'y': [], 'z': []}
+        self.path = '../../dataset/'
+        self.validationdata = {'a': [], 'b': [], 'c': [], 'd': [], 'e': [], 'f': [], 'g': [], 'h': [], 'e': [], 'i': [], 'j': [], 'k': [], 'l': [],
+            'm': [], 'n': [], 'o': [], 'p': [], 'q': [], 'r': [], 's': [], 't': [], 'u': [], 'v': [], 'w': [], 'x': [], 'y': [], 'z': []}
+        self.trainingName = 'trainingBatch.npy'
+        self.validationName = 'validationBatch.npy'
+        self.trainingDataNumber = 0
+        self.validationDataNumber = 0
+
+    def createValidationData(self):
+        i=0
+        for key in self.trainingdata.keys():
+            for img in reversed(self.trainingdata[key]):
+                if i!=500:
+                    self.validationdata[key].append(img)
+                else:
+                    break
+            while i != 0:
+                self.trainingdata.pop()
+                i-=1
+
+    #Upozorenje: 2GB Rama ce zauzeti slike.
+    def createTrainingData(self):
+
+        if os.path.exists(self.trainingName):
+            return
+
+        originalPath = '../../dataset5/'
+        paths = listdir(originalPath)
+        label = ''
+        converter = ImageConverter()
+
+        for path in paths:
+            pathToGo = join(originalPath, path)
+            pathsinPaths = listdir(pathToGo)
+            for letter in pathsinPaths:
+                pathInPath = pathToGo + "/" + letter
+                label = letter
+                for imagePath in glob.glob(pathInPath + '/*.png'):
+                    if "depth" not in imagePath:
+                        image = Image.open(imagePath)
+                        image = image.resize((224, 224), Image.LANCZOS)
+                        npImg = np.asarray(image, dtype=np.uint8)
+                        self.trainingdata[label] = npImg
+                #self.cannyImages(list_of_images, letter)
+                #list_of_images = []
+                #del list_of_images
+        self.createValidationData()
+
+    def cannyImages(self, imageArray, label):
+        for img in imageArray:
+            resized = cv2.resize(img, (200,200))
+            smoothimg = cv2.GaussianBlur(resized, (5,5), 0)             #Koristimo gaussian blur za otklanjanje gaus noise
+            edged = cv2.Canny(smoothimg, 70, 150)
+            foldername = join(self.path, label+"/")
+            shortname = "color_" + str(self.labelmatrix[label]) + ".png"
+            self.labelmatrix[label] = self.labelmatrix[label] + 1
+            filename = join(foldername, shortname)
+
+            if not os.path.exists(foldername):
+                os.makedirs(foldername)
+
+            cv2.imwrite(filename, edged)
+
+    def saveShuffledData(self):
+
+        if os.path.exists(self.trainingName):
+            self.trainingdata = np.load(self.trainingName)
+            return
+
+        else:
+            toSave = []
+
+            for key in self.trainingdata.keys():
+                for data in self.trainingdata[key]:
+                    toSave.append([data, key])
+
+            shuffle(toSave)
+            np.save(self.trainingName, toSave)
+            self.trainingdata = toSave
+
+    def saveValidationData(self):
+        if os.path.exists(self.validationName):
+            self.validationdata = np.load(self.validationName)
+            return
+
+        else:
+            toSave = []
+
+            for key in self.validationdata.keys():
+                for data in self.validationdata[key]:
+                    toSave.append((data, key))
+
+            shuffle(toSave)
+            np.save(self.validationName, np.asarray(toSave))
+            self.trainingdata = toSave
+
+    def getTrainingData(self):
+        return self.trainingdata
+
+    def setTrainingData(self, td):
+        self.trainingdata = td
+
+    def getValidationData(self):
+        return self.validationdata
+
+    def setValidationData(self, data):
+        self.validationdata = data
+
+    def destroyLists(self):
+        del self.trainingdata
+        del self.validationdata
+
 ploter = Ploter()
 
-
-def make_mosaic(imgs, nrows, ncols, border=1):
-    """
-    Given a set of images with all the same shape, makes a
-    mosaic with nrows and ncols
-    """
-
-    nimgs = imgs.shape[0]
-    imshape = imgs.shape[1:]
-
-    mosaic = ma.masked_all((nrows * imshape[0] + (nrows - 1) * border,
-                            ncols * imshape[1] + (ncols - 1) * border),
-                           dtype=np.float32)
-
-    paddedh = imshape[0] + border
-    paddedw = imshape[1] + border
-    for i in tensorflow.xrange(nimgs):
-        row = int(np.floor(i / ncols))
-        col = i % ncols
-
-        mosaic[row * paddedh:row * paddedh + imshape[0],
-        col * paddedw:col * paddedw + imshape[1]] = imgs[i]
-    return mosaic
-
-
-# utility functions
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-def nice_imshow(ax, data, vmin=None, vmax=None, cmap=None):
-    """Wrapper around pl.imshow"""
-    if cmap is None:
-        cmap = cm.jet
-    if vmin is None:
-        vmin = data.min()
-    if vmax is None:
-        vmax = data.max()
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.imshow(data, vmin=vmin, vmax=vmax, interpolation='nearest', cmap=cmap)
-    pl.colorbar(im, cax=cax)
-
-def plot_conv_weights(model, layer):
-    # Visualize weights
-    W = model.layers[layer].W.get_value(borrow=True)
-    W = np.squeeze(W)
-
-    if len(W.shape) == 4:
-        W = W.reshape((-1,W.shape[2],W.shape[3]))
-    print("W shape : ", W.shape)
-
-    pl.figure(figsize=(15, 15))
-    pl.title('conv weights')
-    s = int(np.sqrt(W.shape[0])+1)
-    nice_imshow(pl.gca(), make_mosaic(W, s, s), cmap=cm.binary)
-
-
-
 if activeTrainingBatch == TrainingBatch.MNIST:
-    model = VGGNet()
+    model = Net()
     data = input_data.read_data_sets('MNIST', one_hot=True)
     print("Size of:")
     print("- Training-set:\t\t{}".format(len(data.train.labels)))
@@ -332,7 +383,7 @@ if activeTrainingBatch == TrainingBatch.MNIST:
     ploter.plot_images(testimages, cls_pred=cls_pred, cls_true=cls_true)
 
 elif activeTrainingBatch == TrainingBatch.CIFAR:
-    model = VGGNet()
+    model = Net()
     dictionary = unpickle('cifar-10-batches-py/data_batch_1')
     print(dictionary.keys())
     cifimages = dictionary[b'data']
@@ -356,33 +407,29 @@ elif activeTrainingBatch == TrainingBatch.CIFAR:
             print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
 
 elif activeTrainingBatch == TrainingBatch.HANDS:
-    originalPath = '../../dataset5/'
-    model_path = '../../NeuralNet/Model.keras'
-    paths = listdir(originalPath)
-    label = ''
-    for path in paths:
-        pathToGo = join(originalPath, path)
-        pathsinPaths = listdir(pathToGo)
-        for letter in pathsinPaths:
-            pathInPath = pathToGo + "/" +  letter
-            label = letter
-            list_of_images = []
-            for imagePath in glob.glob(pathInPath+'/*.png'):
-                img = Image.open(imagePath)
-                img = img.resize((224, 224), Image.NEAREST)
-                npImg = np.asarray(img, dtype=np.uint8)
-                try:
-                    h,w,c = npImg.shape
-                    #img.show('WTF', command = None)
-                    list_of_images.append(npImg)
-                except:
-                    continue
-            model = VGGNet(weights_path=None, batch_size=list_of_images.__len__())
-            history = model.start_training(list_of_images, label)
-            model.save_model('signedModel.keras')
-            list_of_images = []
-            del list_of_images
-            new_model = model.load_model(model_path)
-            Ploter.plot_weights()
+    training_data = []
+
+    imageconverter = ImageConverter()
+#    imageconverter.writeConvertedImages()              Ove dve linije se koriste za prebacivanje slike u edge
+    imageconverter.createTrainingData()
+    imageconverter.saveShuffledData()
+    imageconverter.saveValidationData()
+
+    training_data = imageconverter.getTrainingData()
+    validation_data = imageconverter.getValidationData()
+
+    trainingLabels = []
+    trainingImages = []
+
+    imageconverter.destroyLists()
+
+    for key in training_data.keys():
+        trainingLabels.append(key)
+        for img in training_data[key]:
+            trainingImages.append(img)
+
+    model = Net()
+    model.start_training(images=trainingImages, labels=trainingLabels, validation_data=validation_data)
+
 
 
