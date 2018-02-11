@@ -27,7 +27,7 @@ from keras.optimizers import SGD
 from keras.models import load_model
 from keras.preprocessing.image import ImageDataGenerator
 
-from random import shuffle
+from sklearn.utils import shuffle
 from os import listdir
 from enum import Enum
 from os.path import isfile, join
@@ -41,6 +41,7 @@ class TrainingBatch(Enum):
 
 
 activeTrainingBatch = TrainingBatch.HANDS
+
 
 #Size of MNIST image
 img_size_MNIST = 28
@@ -117,9 +118,9 @@ class Net():
         del self.model
         self.model = None
 
-    def start_training(self, images, labels, validation_data):
-        self.model.compile(optimizer=self.optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-        history = self.model.fit(x=images, y=labels, epochs=500, validation_data=validation_data)
+    def start_training(self, images, labels):
+        self.model.compile(optimizer=self.optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        history = self.model.fit(x=images, y=labels, epochs=20, validation_split=0.15, shuffle=True, verbose=1)
         return history
 
     def load_model(self, modelPath):
@@ -234,31 +235,21 @@ class ImageConverter():
     def __init__(self):
         self.labelmatrix = {'a': 0, 'b': 0, 'c': 0, 'd': 0, 'e': 0, 'f': 0, 'g': 0, 'h': 0, 'e': 0, 'i': 0, 'j': 0, 'k': 0, 'l': 0,
             'm': 0, 'n': 0, 'o': 0, 'p': 0, 'q': 0, 'r': 0, 's': 0, 't': 0, 'u': 0, 'v': 0, 'w': 0, 'x': 0, 'y': 0, 'z': 0}
-        self.trainingdata = {'a': [], 'b': [], 'c': [], 'd': [], 'e': [], 'f': [], 'g': [], 'h': [], 'e': [], 'i': [], 'j': [], 'k': [], 'l': [],
-            'm': [], 'n': [], 'o': [], 'p': [], 'q': [], 'r': [], 's': [], 't': [], 'u': [], 'v': [], 'w': [], 'x': [], 'y': [], 'z': []}
+        self.labelOnehot = {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7, 'i': 8,
+                            'k': 9, 'l': 10,
+                            'm': 11, 'n': 12, 'o': 13, 'p': 14, 'q': 15, 'r': 16, 's': 17, 't':18, 'u': 19, 'v': 20, 'w': 21,
+                            'x': 22, 'y': 23}
+        self.trainingdata = []
+        self.traininglabels = []
         self.path = '../../dataset/'
-        self.validationdata = {'a': [], 'b': [], 'c': [], 'd': [], 'e': [], 'f': [], 'g': [], 'h': [], 'e': [], 'i': [], 'j': [], 'k': [], 'l': [],
-            'm': [], 'n': [], 'o': [], 'p': [], 'q': [], 'r': [], 's': [], 't': [], 'u': [], 'v': [], 'w': [], 'x': [], 'y': [], 'z': []}
-        self.trainingName = 'trainingBatch.npy'
-        self.validationName = 'validationBatch.npy'
+        self.trainingName = 'trainingBatches/trainingBatch'
+        self.labelName = 'trainingBatches/labelBatch'
         self.trainingDataNumber = 0
-        self.validationDataNumber = 0
-
-    def createValidationData(self):
-        i=0
-        for key in self.trainingdata.keys():
-            for img in reversed(self.trainingdata[key]):
-                if i!=500:
-                    self.validationdata[key].append(img)
-                else:
-                    break
-            while i != 0:
-                self.trainingdata.pop()
-                i-=1
+        self.readFilenames = []
+        self.batchNumber = 0
 
     #Upozorenje: 2GB Rama ce zauzeti slike.
     def createTrainingData(self):
-
         if os.path.exists(self.trainingName):
             return
 
@@ -266,23 +257,33 @@ class ImageConverter():
         paths = listdir(originalPath)
         label = ''
         converter = ImageConverter()
+        max_pic_per_folder = 150    # Imamo 5 foldera sa 24 subfoldera i svaki subfolder 3000 slika.... 65000 slika
+        read_pictures_per_folder = 0
 
         for path in paths:
             pathToGo = join(originalPath, path)
             pathsinPaths = listdir(pathToGo)
             for letter in pathsinPaths:
+                print("Active letter: "+letter)
                 pathInPath = pathToGo + "/" + letter
                 label = letter
                 for imagePath in glob.glob(pathInPath + '/*.png'):
-                    if "depth" not in imagePath:
-                        image = Image.open(imagePath)
-                        image = image.resize((224, 224), Image.LANCZOS)
+                    if imagePath not in self.readFilenames and read_pictures_per_folder != max_pic_per_folder:
+                        image = cv2.imread(imagePath)
+                        image = cv2.resize(image, (224,224), interpolation=cv2.INTER_LANCZOS4)
+                        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                         npImg = np.asarray(image, dtype=np.uint8)
-                        self.trainingdata[label] = npImg
-                #self.cannyImages(list_of_images, letter)
-                #list_of_images = []
-                #del list_of_images
-        self.createValidationData()
+                        self.trainingdata.append(npImg)
+                        self.traininglabels.append(self.labelOnehot[label])
+                        read_pictures_per_folder += 1
+                        self.readFilenames.append(imagePath)
+                        #self.cannyImages(list_of_images, letter)
+                        #del list_of_images
+        self.saveShuffledData()
+        self.batchNumber += 1
+        self.traininglabels.clear()
+        self.trainingdata.clear()
+        print(self.batchNumber)
 
     def cannyImages(self, imageArray, label):
         for img in imageArray:
@@ -300,37 +301,18 @@ class ImageConverter():
             cv2.imwrite(filename, edged)
 
     def saveShuffledData(self):
+        imgBatchPath = self.trainingName+str(self.batchNumber)+".npy"
+        labelBatchPath = self.labelName+str(self.batchNumber)+"npy"
+        print("Saving data...")
 
-        if os.path.exists(self.trainingName):
-            self.trainingdata = np.load(self.trainingName)
+        if os.path.exists(imgBatchPath):
+            self.trainingdata = np.load(imgBatchPath)
+            self.traininglabels = np.load(labelBatchPath)
             return
 
-        else:
-            toSave = []
-
-            for key in self.trainingdata.keys():
-                for data in self.trainingdata[key]:
-                    toSave.append([data, key])
-
-            shuffle(toSave)
-            np.save(self.trainingName, toSave)
-            self.trainingdata = toSave
-
-    def saveValidationData(self):
-        if os.path.exists(self.validationName):
-            self.validationdata = np.load(self.validationName)
-            return
-
-        else:
-            toSave = []
-
-            for key in self.validationdata.keys():
-                for data in self.validationdata[key]:
-                    toSave.append((data, key))
-
-            shuffle(toSave)
-            np.save(self.validationName, np.asarray(toSave))
-            self.trainingdata = toSave
+        self.trainingdata, self.traininglabels = shuffle(self.trainingdata, self.traininglabels, random_state=0)
+        np.save(labelBatchPath, self.traininglabels)
+        np.save(imgBatchPath, self.trainingdata)
 
     def getTrainingData(self):
         return self.trainingdata
@@ -338,15 +320,11 @@ class ImageConverter():
     def setTrainingData(self, td):
         self.trainingdata = td
 
-    def getValidationData(self):
-        return self.validationdata
-
-    def setValidationData(self, data):
-        self.validationdata = data
+    def getTrainingLabels(self):
+        return self.traininglabels
 
     def destroyLists(self):
         del self.trainingdata
-        del self.validationdata
 
 ploter = Ploter()
 
@@ -413,23 +391,13 @@ elif activeTrainingBatch == TrainingBatch.HANDS:
 #    imageconverter.writeConvertedImages()              Ove dve linije se koriste za prebacivanje slike u edge
     imageconverter.createTrainingData()
     imageconverter.saveShuffledData()
-    imageconverter.saveValidationData()
 
     training_data = imageconverter.getTrainingData()
-    validation_data = imageconverter.getValidationData()
+    training_labels = imageconverter.getTrainingLabels()
 
-    trainingLabels = []
-    trainingImages = []
-
-    imageconverter.destroyLists()
-
-    for key in training_data.keys():
-        trainingLabels.append(key)
-        for img in training_data[key]:
-            trainingImages.append(img)
-
-    model = Net()
-    model.start_training(images=trainingImages, labels=trainingLabels, validation_data=validation_data)
+    #model = Net()
+    #history = model.start_training(images=training_data, labels=training_labels)
+    #print(history)
 
 
 
