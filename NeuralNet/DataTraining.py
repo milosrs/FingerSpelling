@@ -6,6 +6,7 @@
 #Za klasifikaciju sekvence koristiti Stacked LSTM mreze! (Long Short Term Memmory Network)
 #Postoji ceo clanak o tome na Kerasu
 
+import math
 import matplotlib.pyplot as plot
 import tensorflow
 import numpy as np
@@ -93,17 +94,13 @@ class Net():
         model.add(ZeroPadding2D((1, 1), input_shape=(224, 224, 3)))
 
         model.add(Convolution2D(32, (3, 3), activation='relu'))
-        model.add(Convolution2D(32, (3, 3), activation='relu'))
         model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25))
-
-        model.add(Convolution2D(64, (3, 3), activation='relu'))
         model.add(Convolution2D(64, (3, 3), activation='relu'))
         model.add(MaxPooling2D(pool_size=(2, 2)))
         model.add(Dropout(0.25))
 
         model.add(Flatten())
-        model.add(Dense(256, activation='relu'))
+        model.add(Dense(128, activation='relu'))
         model.add(Dropout(0.5))
         model.add(Dense(24, activation='softmax'))          #24 klase
 
@@ -120,7 +117,7 @@ class Net():
 
     def start_training(self, images, labels):
         self.model.compile(optimizer=self.optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-        history = self.model.fit(x=images, y=labels, epochs=20, validation_split=0.15, shuffle=True, verbose=1)
+        history = self.model.fit(x=images, y=labels, epochs=70, validation_split=0.1, shuffle=True, verbose=1)
         return history
 
     def load_model(self, modelPath):
@@ -257,33 +254,45 @@ class ImageConverter():
         paths = listdir(originalPath)
         label = ''
         converter = ImageConverter()
-        max_pic_per_folder = 150    # Imamo 5 foldera sa 24 subfoldera i svaki subfolder 3000 slika.... 65000 slika
+        max_pic_per_folder = 70    # Imamo 5 foldera sa 24 subfoldera i svaki subfolder 3000 slika.... 65000 slika
         read_pictures_per_folder = 0
 
-        for path in paths:
-            pathToGo = join(originalPath, path)
-            pathsinPaths = listdir(pathToGo)
-            for letter in pathsinPaths:
-                print("Active letter: "+letter)
-                pathInPath = pathToGo + "/" + letter
-                label = letter
-                for imagePath in glob.glob(pathInPath + '/*.png'):
-                    if imagePath not in self.readFilenames and read_pictures_per_folder != max_pic_per_folder:
-                        image = cv2.imread(imagePath)
-                        image = cv2.resize(image, (224,224), interpolation=cv2.INTER_LANCZOS4)
-                        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                        npImg = np.asarray(image, dtype=np.uint8)
-                        self.trainingdata.append(npImg)
-                        self.traininglabels.append(self.labelOnehot[label])
-                        read_pictures_per_folder += 1
-                        self.readFilenames.append(imagePath)
-                        #self.cannyImages(list_of_images, letter)
-                        #del list_of_images
-        self.saveShuffledData()
-        self.batchNumber += 1
-        self.traininglabels.clear()
-        self.trainingdata.clear()
-        print(self.batchNumber)
+        while len(self.readFilenames) <= 65001:
+            for path in paths:
+                pathToGo = join(originalPath, path)
+                pathsinPaths = listdir(pathToGo)
+                for letter in pathsinPaths:
+                    pathInPath = pathToGo + "/" + letter
+                    label = letter
+                    printed = False
+                    for imagePath in glob.glob(pathInPath + '/*.png'):
+                        if imagePath not in self.readFilenames and read_pictures_per_folder != max_pic_per_folder:
+                            if printed is False:
+                                print(imagePath)
+                                printed = True
+
+                            image = cv2.imread(imagePath)
+                            image = cv2.resize(image, (224,224), interpolation=cv2.INTER_LANCZOS4)
+                            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                            npImg = np.asarray(image, dtype=np.uint8)
+                            self.trainingdata.append(npImg)
+                            self.traininglabels.append(self.labelOnehot[label])
+                            read_pictures_per_folder += 1
+                            self.readFilenames.append(imagePath)
+                            #self.cannyImages(list_of_images, letter)
+                            #del list_of_images
+                        elif read_pictures_per_folder == max_pic_per_folder:
+                            print(imagePath+" : "+str(read_pictures_per_folder))
+                            read_pictures_per_folder = 0
+                            printed = False
+                            break
+
+                    print("End of traversal")
+            self.saveShuffledData()
+            self.batchNumber += 1
+            self.traininglabels.clear()
+            self.trainingdata.clear()
+            print("Broj batcha:"+str(self.batchNumber))
 
     def cannyImages(self, imageArray, label):
         for img in imageArray:
@@ -314,6 +323,9 @@ class ImageConverter():
         np.save(labelBatchPath, self.traininglabels)
         np.save(imgBatchPath, self.trainingdata)
 
+    def loadBatch(self, path):
+        return np.load(path)
+
     def getTrainingData(self):
         return self.trainingdata
 
@@ -325,6 +337,12 @@ class ImageConverter():
 
     def destroyLists(self):
         del self.trainingdata
+
+def openLabelFile(batchNumber, files):
+    for file in files:
+        if "label" in file:
+            if str(batchNumber) in file:
+                return file
 
 ploter = Ploter()
 
@@ -385,19 +403,46 @@ elif activeTrainingBatch == TrainingBatch.CIFAR:
             print("{0}: {1:.2%}".format(model.get_model().metrics_names[1], result[1]))
 
 elif activeTrainingBatch == TrainingBatch.HANDS:
-    training_data = []
 
+    batchpath = "trainingBatches/"
+    modelPath = "letterDetector.h5"
+    files = os.listdir(batchpath)
+    fileNo = math.floor(len(files)/2)
     imageconverter = ImageConverter()
-#    imageconverter.writeConvertedImages()              Ove dve linije se koriste za prebacivanje slike u edge
-    imageconverter.createTrainingData()
-    imageconverter.saveShuffledData()
+    nextBatch = 0
+    batchesTrainedOnPath = "batchesTrainedOn.npy"
 
-    training_data = imageconverter.getTrainingData()
-    training_labels = imageconverter.getTrainingLabels()
+    if(fileNo == 0):
+       #imageconverter.writeConvertedImages()              Prebacivanje slike u samo ivice (Koristi se za random forest)
+        imageconverter.createTrainingData()
+        imageconverter.saveShuffledData()
+    else:
+        model = Net()
+        if modelPath in listdir():
+            model.load_model(modelPath)
+            nextBatch = np.load(batchesTrainedOnPath)[0]
 
-    #model = Net()
-    #history = model.start_training(images=training_data, labels=training_labels)
-    #print(history)
+        start = "Batch"
+        end = ".npy"
+        for file in files:
+            if "training" in file:
+                startStr = file.find(start) + len(start)
+                endStr = file.find(end, startStr)
+                batchNumber = file[startStr:endStr]
+                if str(nextBatch) == batchNumber:
+                    labelsFile = openLabelFile(batchNumber, files)
+
+                    training_data = imageconverter.loadBatch(batchpath + file)
+                    training_labels = imageconverter.loadBatch(batchpath + labelsFile)
+                    history = model.start_training(images=training_data, labels=training_labels)
+                    model.save_model(modelPath)
+                    model.load_model(modelPath)
+                    files.remove(file)
+                    files.remove(labelsFile)
+                    nextBatch += 1
+                    np.save(batchesTrainedOnPath, np.asarray(nextBatch))
+                else:
+                    continue
 
 
 
