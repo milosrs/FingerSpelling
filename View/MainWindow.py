@@ -4,7 +4,7 @@ import queue
 import numpy as np
 
 from Tracker.HandTracker import Signal
-from darkflow.net.build import TFNet
+from Tracker.HandTracker import Mode
 from Tracker.HandTracker import HandTracker, cv2
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QDesktopWidget, QVBoxLayout, QSplitter, QLabel,
@@ -19,11 +19,16 @@ capture_thread = None
 q = queue.Queue()
 q_erosion = queue.Queue()
 q_dilation = queue.Queue()
+q_edge = queue.Queue()
 isFirstFrame = True
 counter = 0
 
-def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
+
+
+
+def grab(cam, queue, q_erosion, q_dilation, q_edge, width, height, fps):
     global running
+
     kernel = np.ones((10, 10), np.uint8)
     capture = cv2.VideoCapture(0)
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -34,6 +39,8 @@ def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
         frame = {}
         frame_erosion = {}
         frame_dilation = {}
+        frame_edge = {}
+
         try:
             success, img = capture.read()
         except Exception as e:
@@ -44,11 +51,14 @@ def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
 
         img_erosion = cv2.erode(img, kernel, iterations = 1)
         imd_dilation = cv2.dilate(img, kernel, iterations = 1)
+        smoothimg = cv2.GaussianBlur(img, (5, 5), 0)
+        edged = cv2.Canny(smoothimg, 70, 150)
 
         if success:
             frame["img"] = img
             frame_erosion["img"] = img_erosion
             frame_dilation["img"] = imd_dilation
+            frame_edge["img"] = edged
 
         if queue.qsize() < 10:
             queue.put(frame)
@@ -64,6 +74,11 @@ def grab(cam, queue, q_erosion, q_dilation, width, height, fps):
             q_dilation.put(frame_dilation)
         else:
             q_dilation.qsize()
+
+        if q_edge.qsize() <10:
+            q_edge.put(frame_edge)
+        else:
+            q_edge.qsize()
 
 
 class OwnImageWidget(QWidget):
@@ -92,7 +107,6 @@ class OwnImageWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.yoloNet = None
         self.tracker = HandTracker(4)
         self.title = 'Finger Spelling'
         self.resize(900, 500)
@@ -108,8 +122,10 @@ class MainWindow(QMainWindow):
 
         self.window_width = self.frame_widget.live_feed.width()
         self.window_height = self.frame_widget.live_feed.height()
+
         self.win_erosion_h = self.frame_widget.live_feed_erosion.height()
         self.win_erosion_w = self.frame_widget.live_feed_erosion.width()
+
         self.win_dilation_h = self.frame_widget.live_feed_dilation.height()
         self.win_dilation_w = self.frame_widget.live_feed_dilation.width()
 
@@ -124,16 +140,6 @@ class MainWindow(QMainWindow):
         self.isFirstFrame = True
         self.show()
 
-    def initYOLO(self):
-        options = {
-            'model': 'cfg\\tiny-yolo-voc-1c.cfg',
-            'load': 1125,
-            'threshold': 0.1
-        }
-
-        self.yoloNet = TFNet(options)
-
-
     def getLiveFeed(self):
         liveFeed = None
         if self.frame_widget.live_feed is not None:
@@ -145,7 +151,7 @@ class MainWindow(QMainWindow):
         global running
         running = True
         try:
-            capture_thread = threading.Thread(target=grab, args=(0, q, q_erosion, q_dilation, 1280, 720, 30))
+            capture_thread = threading.Thread(target=grab, args=(0, q, q_erosion, q_dilation, q_edge, 1280, 720, 30))
             capture_thread.start()
         except Exception as e:
             print("Thread error")
@@ -161,42 +167,11 @@ class MainWindow(QMainWindow):
     def set_isFirstFrame(self, isFirst):
         self.isFirstFrame = isFirst
 
-    def update_frame(self):
-        global running
+    def set_alternative_frame(self, feed, q, mode=0):
+
         if not q.empty():
             frame = q.get()
             img = frame["img"]
-            img_height, img_width, img_colors = img.shape
-            scale_w = float(self.window_width) / float(img_width)
-            scale_h = float(self.window_height) / float(img_height)
-            scale = min([scale_w, scale_h])
-
-            if scale == 0:
-                scale = 1
-
-            toPut = None
-
-            if running:
-                if self.tracker.signal == Signal.YOLO:
-                    if self.frame_widget.live_feed is not None:
-                        toPut = self.tracker.initTracker(frame, self.yoloNet)
-                else:
-                    if self.frame_widget.live_feed is not None:
-                        toPut = self.tracker.trackframe(frame)
-
-            if toPut is not None:
-                resizedImg = cv2.resize(toPut, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-                img = cv2.cvtColor(resizedImg, cv2.COLOR_BGR2RGB)
-                height, width, channel = img.shape
-                bytesPerLine = 3*width
-                qtImage = QtGui.QImage(img, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
-                self.frame_widget.live_feed.setImage(qtImage)
-
-            self.set_isFirstFrame(False)
-
-        if not q_erosion.empty():
-            frame_erosion = q_erosion.get()
-            img_erosion = frame_erosion["img"]
 
             self.count += 1
             if self.count > 5:
@@ -205,7 +180,7 @@ class MainWindow(QMainWindow):
 
             if running:
                 if self.isFirstFrame is False:
-                    if self.frame_widget.live_feed_erosion is not None:
+                    if feed is not None:
                         if self.use_feed is True:
                             state = self.tracker.get_tracking_state()
                             if state is True:
@@ -216,7 +191,7 @@ class MainWindow(QMainWindow):
                                     p1_y_h = p2[1] - p1[1]
                                     p1_x = p1[0]
                                     p1_x_w = p2[0] - p1[0]
-                                    img_erosion = img_erosion[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
+                                    img = img[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
                                 except Exception as e:
                                     print("Erosion error")
                                     print(type(e))
@@ -234,7 +209,10 @@ class MainWindow(QMainWindow):
             else:
                 pass
 
-            img_height_e, img_width_e, img_colors_e = img_erosion.shape
+            if mode==0:
+                img_height_e, img_width_e, img_colors_e = img.shape
+            else:
+                img_height_e, img_width_e = img.shape
 
             scale_w_e = float(self.win_erosion_w) / float(img_width_e)
             scale_h_e = float(self.win_erosion_h) / float(img_height_e)
@@ -243,64 +221,55 @@ class MainWindow(QMainWindow):
             if scale_e == 0:
                 scale_e = 1
 
-            resizedImg_e = cv2.resize(img_erosion, None, fx=scale_e, fy=scale_e, interpolation=cv2.INTER_CUBIC)
-            img_e = cv2.cvtColor(resizedImg_e, cv2.COLOR_BGR2RGB)
-            height_e, width_e, channel_e = img_e.shape
-            bytesPerLine_e = 3 * width_e
-            qtImage_e = QtGui.QImage(img_e.data, width_e, height_e, bytesPerLine_e, QtGui.QImage.Format_RGB888)
-            self.frame_widget.live_feed_erosion.setImage(qtImage_e)
+            resizedImg_e = cv2.resize(img, None, fx=scale_e, fy=scale_e, interpolation=cv2.INTER_CUBIC)
 
-        if not q_dilation.empty():
-            frame_dilation = q_dilation.get()
-            img_dilation = frame_dilation["img"]
+            if mode==0:
+                img_e = cv2.cvtColor(resizedImg_e, cv2.COLOR_BGR2RGB)
+                height_e, width_e, channel_e = img_e.shape
+                bytesPerLine_e = 3 * width_e
+                qtImage_e = QtGui.QImage(img_e.data, width_e, height_e, bytesPerLine_e, QtGui.QImage.Format_RGB888)
+                feed.setImage(qtImage_e)
+            else:
+                cv2.imshow("Canny", resizedImg_e)
+
+
+    def update_frame(self):
+        global running
+
+        if not q.empty():
+            frame = q.get()
+            img = frame["img"]
+            img_height, img_width, img_colors = img.shape
+            scale_w = float(self.window_width) / float(img_width)
+            scale_h = float(self.window_height) / float(img_height)
+            scale = min([scale_w, scale_h])
+
+            if scale == 0:
+                scale = 1
+
+            toPut = None
 
             if running:
-                if self.isFirstFrame is False:
-                    if self.frame_widget.live_feed_dilation is not None:
-                        if self.use_feed is True:
-                            state = self.tracker.get_tracking_state()
-                            if state is True:
-                                try:
-                                    p1 = self.tracker.get_corner()
-                                    p2 = self.tracker.get_opposite_corner()
-                                    p1_y = p1[1]
-                                    p1_y_h = p2[1] - p1[1]
-                                    p1_x = p1[0]
-                                    p1_x_w = p2[0] - p1[0]
-                                    img_dilation = img_dilation[p1_y:p1_y+p1_y_h, p1_x:p1_x+p1_x_w]
-                                except Exception as e:
-                                    print("Dilation error")
-                                    print(type(e))
-                                    print(e.args)
-                                    print(e)
-                            else:
-                                pass
-                        else:
-                            pass
-                    else:
-                        pass
+                if self.tracker.signal == Signal.YOLO:
+                    if self.frame_widget.live_feed is not None:
+                        toPut = self.tracker.initTracker(img)
                 else:
-                    pass
-            else:
-                pass
+                    if self.frame_widget.live_feed is not None:
+                        toPut = self.tracker.trackframe(img)
 
-            img_height_d, img_width_d, img_colors_d = img_dilation.shape
+            if toPut is not None:
+                resizedImg = cv2.resize(toPut, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+                img = cv2.cvtColor(resizedImg, cv2.COLOR_BGR2RGB)
+                height, width, channel = img.shape
+                bytesPerLine = 3*width
+                qtImage = QtGui.QImage(img, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
+                self.frame_widget.live_feed.setImage(qtImage)
 
-            scale_w_d = float(self.win_dilation_w) / float(img_width_d)
-            scale_h_d = float(self.win_dilation_h) / float(img_height_d)
-            scale_d = min([scale_w_d, scale_h_d])
+            self.set_isFirstFrame(False)
 
-            if scale_d == 0:
-                scale_d = 1
-
-            resizedImg_d = cv2.resize(img_dilation, None, fx=scale_d, fy=scale_d, interpolation=cv2.INTER_CUBIC)
-            img_d = cv2.cvtColor(resizedImg_d, cv2.COLOR_BGR2RGB)
-            height_d, width_d, channel_d = img_d.shape
-            bytesPerLine_d = 3 * width_d
-            qtImage_d = QtGui.QImage(img_d.data, width_d, height_d, bytesPerLine_d, QtGui.QImage.Format_RGB888)
-            self.frame_widget.live_feed_dilation.setImage(qtImage_d)
-
-
+        self.set_alternative_frame(self.frame_widget.live_feed_erosion, q_erosion, mode=0)
+        self.set_alternative_frame(self.frame_widget.live_feed_dilation, q_dilation, mode=0)
+        self.set_alternative_frame(None, q_edge, mode=1)
 
 
     def center(self):
@@ -318,11 +287,12 @@ class FrameWidget(QWidget):
 
         self.live_feed = QWidget()
         self.live_feed_erosion = QWidget()
-        self.live_feed_erosion.setMinimumSize(200, 200)
-        self.live_feed_erosion.setMaximumSize(200,200)
+        self.live_feed_erosion.setMinimumSize(224, 224)
+        self.live_feed_erosion.setMaximumSize(224,224)
+
         self.live_feed_dilation = QWidget()
-        self.live_feed_dilation.setMinimumSize(200, 200)
-        self.live_feed_dilation.setMaximumSize(200,200)
+        self.live_feed_dilation.setMinimumSize(224, 224)
+        self.live_feed_dilation.setMaximumSize(224,224)
 
         self.side_window = QSplitter(Qt.Vertical)
         self.side_window.addWidget(self.live_feed_erosion)

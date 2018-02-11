@@ -429,20 +429,21 @@ elif activeTrainingBatch == TrainingBatch.HANDS:
                 startStr = file.find(start) + len(start)
                 endStr = file.find(end, startStr)
                 batchNumber = file[startStr:endStr]
+
                 if str(nextBatch) == batchNumber:
                     labelsFile = openLabelFile(batchNumber, files)
-
-                    training_data = imageconverter.loadBatch(batchpath + file)
-                    training_labels = imageconverter.loadBatch(batchpath + labelsFile)
-                    history = model.start_training(images=training_data, labels=training_labels)
-                    model.save_model(modelPath)
-                    model.load_model(modelPath)
-                    files.remove(file)
-                    files.remove(labelsFile)
-                    nextBatch += 1
-                    np.save(batchesTrainedOnPath, np.asarray(nextBatch))
                 else:
-                    continue
+                    labelsFile = openLabelFile(str(nextBatch), files)
+
+                training_data = imageconverter.loadBatch(batchpath + file)
+                training_labels = imageconverter.loadBatch(batchpath + labelsFile)
+                history = model.start_training(images=training_data, labels=training_labels)
+                model.save_model(modelPath)
+                model.load_model(modelPath)
+                files.remove(file)
+                files.remove(labelsFile)
+                nextBatch += 1
+                np.save(batchesTrainedOnPath, np.asarray(nextBatch))
 
 
 
